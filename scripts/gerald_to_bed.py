@@ -23,53 +23,53 @@ parser.add_option('--chromo-strip',dest='chromo_strip',default=None,help='patter
 
 if __name__ == '__main__' :
 
-	opts,args = parser.parse_args(sys.argv[1:])
+    opts,args = parser.parse_args(sys.argv[1:])
 
-	if len(args) == 0 :
-		parser.print_usage()
-		sys.exit(1)
+    if len(args) == 0 :
+        parser.print_usage()
+        sys.exit(1)
 
-	gerald_fns = args
+    gerald_fns = args
 
-	# step through the files
-	for gerald_fn in gerald_fns :
-		path,fn,fnbase,fnext = get_file_parts(gerald_fn)
-		bed_lines = []
+    # step through the files
+    for gerald_fn in gerald_fns :
+        path,fn,fnbase,fnext = get_file_parts(gerald_fn)
+        bed_lines = []
 
 
-		# where to write output to
-		if opts.stdout :
-			f_out = sys.stdout
-		else :
-			f_out = open(os.path.join(path,fnbase+'.bed'),'w')
+        # where to write output to
+        if opts.stdout :
+            f_out = sys.stdout
+        else :
+            f_out = open(os.path.join(path,fnbase+'.bed'),'w')
 
-		# process input
-		gerald_d = DictReader(open(gerald_fn),fieldnames=GERALDOutput.FIELD_NAMES,delimiter='\t')
-		for line_d in gerald_d :
-			if (opts.pass_only and line_d['filtering'] == 'Y' and line_d['match_pos'] != '') or (not opts.pass_only and line_d['match_pos'] != '') :
+        # process input
+        gerald_d = DictReader(open(gerald_fn),fieldnames=GERALDOutput.FIELD_NAMES,delimiter='\t')
+        for line_d in gerald_d :
+            if (opts.pass_only and line_d['filtering'] == 'Y' and line_d['match_pos'] != '') or (not opts.pass_only and line_d['match_pos'] != '') :
 
-				if opts.chromo_strip is not None :
-					line_d['match_chromo'] = line_d['match_chromo'].replace(opts.chromo_strip,'')
+                if opts.chromo_strip is not None :
+                    line_d['match_chromo'] = line_d['match_chromo'].replace(opts.chromo_strip,'')
 
-				outline = [line_d['match_chromo'], # chromosome
-				           line_d['match_pos'], # start
-				           str(int(line_d['match_pos'])+len(line_d['read'])), # end
-				           line_d['read'], # read
-				           '0', # score
-				           '+' if line_d['match_strand'] == 'F' else '-', # strand
-				           '-', # thickStart
-				           '-', # thickEnd
-				           '0,0,255' if line_d['match_strand'] == 'F' else '255,0,0', # itemRgb 
-				          ]
-				outline = '\t'.join(outline)
-				f_out.write(outline+'\n')
-				#bed_lines.append(bed)
+                outline = [line_d['match_chromo'], # chromosome
+                           line_d['match_pos'], # start
+                           str(int(line_d['match_pos'])+len(line_d['read'])), # end
+                           line_d['read'], # read
+                           '0', # score
+                           '+' if line_d['match_strand'] == 'F' else '-', # strand
+                           '-', # thickStart
+                           '-', # thickEnd
+                           '0,0,255' if line_d['match_strand'] == 'F' else '255,0,0', # itemRgb 
+                          ]
+                outline = '\t'.join(outline)
+                f_out.write(outline+'\n')
+                #bed_lines.append(bed)
 
-		# this is the slow way
-		#for line in open(gerld_fn) :
-		#	grld = GERALDOutput(line)
-		#	if (opts.pass_only and grld.filtering == 'Y' and grld.match_pos != '') or (not opts.pass_only and grld.match_pos != '') :
-		#		bed = gerald_to_bed(grld,opts.min_fields)
-		#		f_out.write(bed.output_format())
-		#		#bed_lines.append(bed)
+        # this is the slow way
+        #for line in open(gerld_fn) :
+        #    grld = GERALDOutput(line)
+        #    if (opts.pass_only and grld.filtering == 'Y' and grld.match_pos != '') or (not opts.pass_only and grld.match_pos != '') :
+        #        bed = gerald_to_bed(grld,opts.min_fields)
+        #        f_out.write(bed.output_format())
+        #        #bed_lines.append(bed)
 

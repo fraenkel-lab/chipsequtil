@@ -8,20 +8,20 @@ parser = OptionParser()
 
 if __name__ == '__main__' :
 
-	opts, args = parser.parse_args(sys.argv[1:])
+    opts, args = parser.parse_args(sys.argv[1:])
 
-	all_stats = dd(int)
-	for fn in args :
-		d = eval(open(fn).read())
-		for k,v in d.items() :
-			all_stats[k] += v
-			all_stats['tot. aligns'] += v
+    all_stats = dd(int)
+    for fn in args :
+        d = eval(open(fn).read())
+        for k,v in d.items() :
+            all_stats[k] += v
+            all_stats['tot. aligns'] += v
 
-	keys = all_stats.keys()
-	keys.sort()
-	keys.remove('tot. aligns')
+    keys = all_stats.keys()
+    keys.sort()
+    keys.remove('tot. aligns')
 
-	for k in keys :
-		print k,':',all_stats[k],'(%.4f)'%(float(all_stats[k])/all_stats['tot. aligns'])
+    for k in keys :
+        print k,':',all_stats[k],'(%.4f)'%(float(all_stats[k])/all_stats['tot. aligns'])
 
-	print 'tot. aligns',':',all_stats['tot. aligns']
+    print 'tot. aligns',':',all_stats['tot. aligns']

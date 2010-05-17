@@ -15,30 +15,30 @@ parser.add_option('--output',dest='output',default=sys.stdout,help='filename to 
 
 if __name__ == '__main__' :
 
-	opts, args = parser.parse_args(sys.argv[1:])
+    opts, args = parser.parse_args(sys.argv[1:])
 
-	if len(args) == 0 :
-		parser.error("Must provide at least one file")
+    if len(args) == 0 :
+        parser.error("Must provide at least one file")
 
-	fns = args
-	chromos = dd(list)
+    fns = args
+    chromos = dd(list)
 
-	# load each chromosome separately
-	for fn in fns :
-		bed_reader = reader(open(fn),delimiter='\t')
-		for line in bed_reader :
-			chromos[line[0]].append(line)
+    # load each chromosome separately
+    for fn in fns :
+        bed_reader = reader(open(fn),delimiter='\t')
+        for line in bed_reader :
+            chromos[line[0]].append(line)
 
-	# determine where we're writing to
-	if opts.output != sys.stdout :
-		f = open(opts.output,'w')
-	else :
-		f = opts.output
+    # determine where we're writing to
+    if opts.output != sys.stdout :
+        f = open(opts.output,'w')
+    else :
+        f = opts.output
 
-	# write the chromos in lexicographic sorted order
-	bed_writer = writer(f,delimiter='\t')
-	for k in sorted(chromos.keys()) :
+    # write the chromos in lexicographic sorted order
+    bed_writer = writer(f,delimiter='\t')
+    for k in sorted(chromos.keys()) :
 
-		# sort each chromosome's BED lines by stat position
-		chromos[k].sort(key=lambda x: int(line[1]))
-		bed_writer.writerows(chromos[k])
+        # sort each chromosome's BED lines by stat position
+        chromos[k].sort(key=lambda x: int(line[1]))
+        bed_writer.writerows(chromos[k])
