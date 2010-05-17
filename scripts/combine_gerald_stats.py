@@ -22,6 +22,6 @@ if __name__ == '__main__' :
 	keys.remove('tot. aligns')
 
 	for k in keys :
-		print k,':',all_stats[k],'(%.2f)'%(float(all_stats[k])/all_stats['tot. aligns'])
+		print k,':',all_stats[k],'(%.4f)'%(float(all_stats[k])/all_stats['tot. aligns'])
 
 	print 'tot. aligns',':',all_stats['tot. aligns']

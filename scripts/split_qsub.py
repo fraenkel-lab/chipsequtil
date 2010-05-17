@@ -46,6 +46,7 @@ if __name__ == '__main__' :
 #$ -S /bin/sh
 #$ -o %(stdout)s
 #$ -e %(stderr)s
+export PYTHONPATH=%(pythonpath)s:${PYTHONPATH}
 
 %(utility)s %(utilargs)s %(filename)s"""
 
@@ -55,7 +56,7 @@ if __name__ == '__main__' :
 		fpath,fname,fbase,fext = get_file_parts(abs_fn)
 		stdout = os.path.join(fpath,fname+'_'+suffix+opts.ext)
 		stderr = '/dev/null' if not opts.keep_stderr else os.path.join(fpath,fname+'_'+suffix+'.err')
-		call_script = runscript_tmpl%{'jobname':fname,'utility':abs_utility,'filename':abs_fn,'stdout':stdout,'stderr':stderr,'utilargs':opts.util_args}
+		call_script = runscript_tmpl%{'jobname':fname,'utility':abs_utility,'filename':abs_fn,'stdout':stdout,'stderr':stderr,'utilargs':opts.util_args,'pythonpath':os.environ.get('PYTHONPATH','')}
 		f = open('%s'%abs_fn+'_'+utility+'.script','w')
 		f.write(call_script)
 		f.close()
