@@ -21,7 +21,7 @@ parser.add_option('--exp-name',dest='exp_name',default=os.path.basename(os.getcw
 parser.add_option('--split-args',dest='split_args',default='--type=count --arg=16',help='double quote wrapped arguments for split_file.py [default: %default]')
 parser.add_option('--bed-args',dest='bed_args',default='--stdout --chromo-strip=.fa',help='double quote wrapped arguments for gerald_to_bed.py [default: %default]')
 parser.add_option('--stats-args',dest='stats_args',default='',help='double quote wrapped arguments for gerald_stats.py [default: %default]')
-parser.add_option('--qsub-args',dest='qsub_args',default='',help='double quote wrapped arguments for split_qsub.py [default: %default]')
+parser.add_option('--qsub-args',dest='qsub_args',default='--die-on-err',help='double quote wrapped arguments for split_qsub.py [default: %default]')
 parser.add_option('--macs-args',dest='macs_args',default='--mfold=10 --tsize=35 --bw=150 --pvalue=1e-5',help='double quote wrapped arguments for macs, only changing --mfold, --tsize, --bw, and --pvalue recommended [default: %default]')
 
 

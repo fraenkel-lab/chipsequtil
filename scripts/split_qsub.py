@@ -1,8 +1,12 @@
 #!/usr/bin/env python
 
-import sys, os
-from optparse import OptionParser, OptionError
+from __future__ import with_statement
+import os
+import sys
+from optparse import OptionParser
 from subprocess import Popen, PIPE
+
+from chipsequtil import get_file_parts
 
 usage = "[%prog] [options] <utility> <file> [<file> <file> ...]"
 description = """\
@@ -16,11 +20,8 @@ parser.add_option('--ext',dest='ext',default='.out',help='file extension to use 
 parser.add_option('--util-args',dest='util_args',default='',help='double quote wrapped arguments to pass to <utility>')
 parser.add_option('--keep-stderr',dest='keep_stderr',action='store_true',help='capture stderr files, useful for debugging')
 parser.add_option('--keep-scripts',dest='keep_scripts',action='store_true',help='do not delete qsub scripts generated after job submission')
+parser.add_option('--die-on-error',dest='die_on_err',action='store_true',help='if any one of the qsub submissions returns non-zero exit status, stop executing')
 
-def get_file_parts(path) :
-    path,fn = os.path.split(path)
-    basename,ext = os.path.splitext(fn)
-    return path,fn,basename,ext
 
 if __name__ == '__main__' :
 
@@ -64,3 +65,8 @@ export PYTHONPATH=%(pythonpath)s:${PYTHONPATH}
         p.wait()
         if not opts.keep_scripts :
             os.remove(f.name)
+
+        if opts.die_on_err and p.returncode != 0 :
+            with open(stderr,'w') as f :
+                f.write('qsub returned non-zero exit code for file %s, aborting\n'%fn)
+            sys.exit(1)

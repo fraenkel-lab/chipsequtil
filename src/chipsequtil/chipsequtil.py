@@ -1,5 +1,6 @@
 import os
 from ConfigParser import ConfigParser
+from csv import DictReader
 
 import chipsequtil
 
@@ -66,7 +67,6 @@ class GERALDOutput :
         """GERALD format exception, raised on malformatted input"""
         pass
 
-
 class BEDOutput :
     """Container for one line of BED alignment output"""
 
@@ -112,6 +112,12 @@ class BEDOutput :
     class FormatException(Exception) :
         """BED format exception, raised on malformatted input"""
         pass
+
+
+class BEDFile(DictReader) :
+    '''An iterable object (subclasses csv.DictReader) containing the records in the supplied BED formatted file'''
+    def __init__(self,bed_fn) :
+        DictReader.__init__(self,open(bed_fn),delimiter='\t',fieldnames=BEDOutput.FIELD_NAMES)
 
 
 class RefGeneOutput(object) :
@@ -167,29 +173,61 @@ class MACSOutput(object) :
                    'FDR',
                   ]
 
-ORG_SETTINGS_FN='org_settings.cfg'
-def _get_org_settings(org_key=None,addnl_configs=[]) :
-    """Utility function used by get_org_settings and get_all_settings, should not be called directly"""
+
+GLOBAL_SETTINGS_FN = os.path.join(os.path.split(chipsequtil.__file__)[0],'org_settings.cfg')
+LOCAL_SETTINGS_FN = os.path.expanduser(os.path.join('~','.org_settings.cfg'))
+_ALL_SETTINGS, _LOCAL_SETTINGS, _GLOBAL_SETTINGS = range(3)
+
+def _get_org_settings(org_key=None,addnl_configs=[],src=_ALL_SETTINGS) :
+    """Utility function used by get_org_settings and get_all_settings, should \
+    not be called directly"""
 
     config = ConfigParser()
-    chipsequtil_base = os.path.split(chipsequtil.__file__)[0]
-    config.read([chipsequtil_base+'/'+ORG_SETTINGS_FN,os.path.expanduser('~/.org_settings.cfg')]+addnl_configs)
+    chipsequtil_base =     conf_fns = []
+    if src in [_LOCAL_SETTINGS, _ALL_SETTINGS] :
+        conf_fns.append(LOCAL_SETTINGS_FN)
+    if src in [_GLOBAL_SETTINGS, _ALL_SETTINGS] :
+        conf_fns.append(GLOBAL_SETTINGS_FN)
+    config.read(conf_fns+addnl_configs)
 
     d = {}
     if org_key is None :
         for sec in config.sections() :
-            d[sec] = config.items(sec)
+            # try to cast numeric-looking arguments into float, int
+            d[sec] = dict([(k,parse_number(v)) for k,v in config.items(sec)])
     else :
-        d = config.items(org_key)
+        d = dict([(k,parse_number(v)) for k,v in config.items(org_key)])
 
-    return dict(d)
+    return d
+
 
 def get_org_settings(org_key,addnl_configs=[]) :
     '''Returns a dict of setting/path values for a given organism as specified in system-wide and user's settings.'''
     return _get_org_settings(org_key,addnl_configs=[])
 
+
 def get_all_settings(addnl_configs=[]) :
     '''Returns a dict of setting/path values for every organism as specified in system-wide and user's settings.'''
-    return _get_org_settings(None,addnl_configs=[])
+    return _get_org_settings(None,addnl_configs=addnl_configs)
 
+
+def get_global_settings() :
+    '''Returns a dict of the global setting/path values'''
+    return _get_org_settings(None,src=_GLOBAL_SETTINGS)
+
+
+def get_local_settings() :
+    '''Returns a dict of the current user's setting/path values'''
+    return _get_org_settings(None,src=_LOCAL_SETTINGS)
+
+
+RC_MAP_TABLE = ''.join([chr(i) for i in xrange(256)])
+# use pairs to replace, otherwise we overwrite previous substitutions
+RC_MAP_TABLE = RC_MAP_TABLE.replace('ab','tb').replace('tu','au').replace('cd','gd').replace('gh','ch')
+RC_MAP_TABLE = RC_MAP_TABLE.replace('AB','TB').replace('TU','AU').replace('CD','GD').replace('GH','CH')
+def reverse_complement(seq) :
+    """Reverse complements nucleotide string *seq*.  Leaves non-nucleotide characters uneffected."""
+    seq_complement = list(seq.translate(RC_MAP_TABLE))
+    seq_complement.reverse()
+    return ''.join(seq_complement)
 
