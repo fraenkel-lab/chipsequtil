@@ -105,34 +105,19 @@ if __name__ == '__main__' :
 
     # get the sequences from the .nib file
     try :
-        seqs = get_nib_seq_batch(nib_path,queries,mask_type)
+        headers, seqs = get_nib_batch(nib_path,queries,mask_type)
     except NibException, e :
         sys.stderr.write(e.message+'\n')
         sys.exit(1)
 
-    # construct header
     nbases = validate_nib_file(nib_path)
 
     # output all queries
-    for query, seq in zip(queries,seqs) :
-        start,end,strand = query
-        if end == -1 :
-            end = nbases
-        fields = {}
-        fields['name'] = nib_path+':%d-%d'%(start,end) if not opts.name else opts.name
-        fields['db'] = ''
-
-        if opts.tbaHeader :
-            # ignored for some reason in nibFrag when tbaHeader supplied and dbHeader is not
-            fields['name'] = '' if not opts.dbHeader else fields['name']
-            fields['db'] = '%s.%s:%d-%d of %d'%(opts.tbaHeader,nib_base,start,end,nbases)
-        if opts.dbHeader :
-            fields['db'] = ':%s.%s:%d-%d:%s:%d'%(opts.dbHeader,nib_base,start,end,strand,nbases)
-
-        header_tmpl = '>%(name)s%(db)s\n'
+    for header, seq in zip(header,seqs) :
 
         # write output
-        out_f.write(header_tmpl%fields)
+        out_f.write(header)
+
         if opts.upper :
             seq = seq.upper()
         if opts.wrap_width == 0 :

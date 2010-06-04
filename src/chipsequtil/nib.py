@@ -1,3 +1,6 @@
+'''Functions and classes used to interface with .nib files as created by Jim
+Kent's nibFrag and faToNib utilities.'''
+
 import glob
 import math
 import os
@@ -36,6 +39,21 @@ def _nib_fd(nib) :
     return nib_fn, nib_f
 
 
+def get_nib(nib,start=0,end=-1,strand='+',mask=NOMASK,name=None,dbHeader=None,tbaHeader=None) :
+    '''Return a (header,sequence) tuple representing this nibFrag record'''
+    headers = get_nib_header_batch(nib,[(start,end,strand,name,dbHeader,tbaHeader),])
+    seqs = get_nib_seq_batch(nib,[(start,end,strand)],mask)
+    return headers[0], seqs[0]
+
+
+def get_nib_batch(nib,queries,mask=NOMASK) :
+    '''Batch interface for fetching fasta records.  Returns tuple of lists
+    (headers,sequences)'''
+    headers = get_nib_header_batch(nib,queries)
+    seqs = get_nib_seq_batch(nib,[x[:3] for x in queries],mask=mask)
+    return headers, seqs
+
+
 def get_nib_seq(nib,start=0,end=-1,strand='+',mask=NOMASK) :
     '''Extract subsequence from .nib file like Jim Kent's nibFrag utility.
     Default behavior is to return the entire sequence.
@@ -49,6 +67,43 @@ def get_nib_seq(nib,start=0,end=-1,strand='+',mask=NOMASK) :
     chipsequtil.nib.NOMASK -- masked positions are replaced with Ns
     '''
     return get_nib_seq_batch(nib,[(start,end,strand)],mask)[0]
+
+
+def get_nib_header(nib_fn,start=0,end=-1,strand='+',name=None,dbHeader=None,tbaHeader=None) :
+    '''Method for constructing fasta headers compliant with nibFrag utility'''
+    headers = get_nib_header_batch(nib,[(start,end,strand,name,dbHeader,tbaHeader),])
+    return headers[0]
+
+
+def get_nib_header_batch(nib,queries) :
+    '''Batch method for creating nibFrag headers.  *queries* is a list of 6-tuples
+    (start,end,strand,name,dbHeader,tbaHeader) representing queries as specified by
+    the original nibFrag utility.'''
+
+    nib_path, nib_f = _nib_fd(nib)
+
+    nib_dir,nib_fn,nib_base,nib_ext = get_file_parts(nib_path)
+    nbases = validate_nib_file(nib)
+    headers = []
+    header_tmpl = '>%(name)s%(db)s\n'
+
+    for start, end, strand, name, dbHeader, tbaHeader in queries :
+        if end == -1 :
+            end = nbases
+        fields = {}
+        fields['name'] = nib_path+':%d-%d'%(start,end) if not name else name
+        fields['db'] = ''
+
+        if tbaHeader :
+            # ignored for some reason in nibFrag when tbaHeader supplied and dbHeader is not
+            fields['name'] = '' if not dbHeader else fields['name']
+            fields['db'] = '%s.%s:%d-%d of %d'%(tbaHeader,nib_base,start,end,nbases)
+        if dbHeader :
+            fields['db'] = ':%s.%s:%d-%d:%s:%d'%(dbHeader,nib_base,start,end,strand,nbases)
+
+        headers.append(header_tmpl%fields)
+
+    return headers
 
 
 def validate_nib_file(nib) :
@@ -113,7 +168,8 @@ def get_nib_seq_batch(nib,queries,mask=NOMASK) :
             return 'N'
         return nuc
 
-    seqs = []
+    headers = [] # stores headers
+    seqs = [] # stores sequences
 
     # sort the coords so we can walk most efficiently through the file
     queries.sort()
@@ -180,10 +236,22 @@ def get_nib_seq_batch(nib,queries,mask=NOMASK) :
     return seqs
 
 
+class SeqDBException(Exception): pass
 class NibDBException(Exception): pass
 
 
-class NibDB(object) :
+class SeqDB(object) :
+    '''Base class for different kinds of sequence databases.  Does nothing,
+    implement subclasses.  Constructor rovides _db_map and db_info class members.'''
+    def __init__(self) :
+        self._db_map = {}
+        self.db_info = dd(dict)
+
+    def get_seq(self,*args, **kwargs) :
+        raise SeqDBException('Base class SeqDB has no get_seq implementation')
+
+
+class NibDB(SeqDB) :
     '''Class providing an interface to a set of .nib files as created by faToNib
     in Jim Kent's software suite.
 
@@ -201,43 +269,58 @@ class NibDB(object) :
         Explicitly passed files take precedence over those found in directories
         when sequence names collide.
         '''
+        SeqDB.__init__(self)
 
         # find all *.nib files in the directories passed
-        dir_nibs = []
-        for d in nib_dirs :
-            dir_nibs.extend(glob.glob(os.path.join(d,'*.nib')))
+        if isinstance(nib_dirs,str) : # user just provided single directory
+            dir_nibs = [nib_dirs]
+        else :
+            dir_nibs = []
+            for d in nib_dirs :
+                dir_nibs.extend(glob.glob(os.path.join(d,'*.nib')))
 
+        if isinstance(nib_fns,str) :
+            nib_fns = [nib_fns]
         # for each .nib found, add to db
         # if there is a collision of names, those specified in files (not dirs)
         # takes precedence without warning
-        self._nib_map = {}
-        self.nib_info = dd(dict)
         for fn in dir_nibs+nib_fns :
 
             # open the nib file
             nib_path,nib_fn,nib_base,nib_ext = get_file_parts(fn)
             fn, nib_f = _nib_fd(fn)
-            self._nib_map[nib_base] = nib_f
+            self._db_map[nib_base] = nib_f
 
             # store some info
-            self.nib_info[nib_base]['path'] = fn
-            nbases = validate_nib_file(self._nib_map[nib_base])
-            self.nib_info[nib_base]['nbases'] = nbases
+            self.db_info[nib_base]['path'] = fn
+            nbases = validate_nib_file(self._db_map[nib_base])
+            self.db_info[nib_base]['nbases'] = nbases
 
     def __del__(self) :
         '''import this
         ...Explicit is better than implicit...
         '''
-        for nib_f in self._nib_map.values() :
+        for nib_f in self._db_map.values() :
             nib_f.close()
+
+    def _get_db_map(self,name) :
+        '''Gets appropriate file handle for the requested name, raises NibDBException
+        if it cannot be found'''
+        try :
+            return self._db_map[name]
+        except KeyError :
+            raise NibDBException('Sequence name %s not found in NibDB'%name)
+
+    def get_fasta(self,name,start=0,end=-1,strand='+',mask=NOMASK) :
+        '''Get the fasta record for the specified arguments, returns (header,sequence)
+        tuple'''
+
+        nib_f = self._get_db_map(name)
+        return get_nib(nib_f,start,end,strand,mask)
 
     def get_seq(self,name,start=0,end=-1,strand='+',mask=NOMASK) :
         '''Extract sequence from sequence *name*. Other arguments are passed
         directly to *get_nib_seq* function.'''
 
-        try :
-            nib_f = self._nib_map[name]
-        except KeyError :
-            raise NibDBException('Sequence name %s not found in NibDB'%name)
-
+        nib_f = self._get_db_map(name)
         return get_nib_seq(nib_f,start,end,strand,mask)

@@ -47,6 +47,7 @@ if __name__ == '__main__' :
 #$ -S /bin/sh
 #$ -o %(stdout)s
 #$ -e %(stderr)s
+#$ -cwd
 export PYTHONPATH=%(pythonpath)s:${PYTHONPATH}
 
 %(utility)s %(utilargs)s %(filename)s"""

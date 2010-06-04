@@ -1,8 +1,14 @@
+import math
 import os
+
 from ConfigParser import ConfigParser
 from csv import DictReader
+from collections import defaultdict
 
 import chipsequtil
+
+# for RefGeneDB
+from util import KeyedBinaryTree
 
 
 def get_file_parts(path) :
@@ -51,7 +57,11 @@ class GERALDOutput :
             line = line.strip().split('\t')
 
         if len(line) != len(GERALDOutput.FIELD_NAMES) :
-            raise GERALDOutput.FormatException('Expected %d fields in input, found %d in line: %s'%(len(GERALDOutput.FIELD_NAMES),len(line),line))
+            raise GERALDOutput.FormatException('Expected %d fields in input, \
+                                               found %d in line: %s'%
+                                               (len(GERALDOutput.FIELD_NAMES),
+                                                len(line),
+                                                line))
 
         for fn,d in zip(GERALDOutput.FIELD_NAMES,line) :
             setattr(self,fn,parse_number(d))
@@ -90,9 +100,12 @@ class BEDOutput :
             line = line.strip().split('\t')
 
         if len(line) < 3 and any([x not in kwargs.keys() for x in ['chrom','chromStart','chromEnd']]) :
-            raise BEDOutput.FormatException('Format requres at least 3 fields in input, found %d in line: %s'%(len(line),line))
+            raise BEDOutput.FormatException('Format requres at least 3 fields in \
+                                            input, found %d in line: %s'%(len(line),line))
         if len(line) > len(BEDOutput.FIELD_NAMES) :
-            raise BEDOutput.FormatException('Format requres at most %d fields in input, found %d in line: %s'%(len(BEDOutput.FIELD_NAMES),len(line),line))
+            raise BEDOutput.FormatException('Format requres at most %d fields in \
+                                             input, found %d in line: %s'%
+                                             (len(BEDOutput.FIELD_NAMES),len(line),line))
 
         empty_fields = ['']*(len(BEDOutput.FIELD_NAMES)-len(line))
         for fn,d in zip(BEDOutput.FIELD_NAMES,line+empty_fields) :
@@ -115,9 +128,11 @@ class BEDOutput :
 
 
 class BEDFile(DictReader) :
-    '''An iterable object (subclasses csv.DictReader) containing the records in the supplied BED formatted file'''
+    '''An iterable object (subclasses csv.DictReader) containing the records in
+    the supplied BED formatted file'''
     def __init__(self,bed_fn) :
-        DictReader.__init__(self,open(bed_fn),delimiter='\t',fieldnames=BEDOutput.FIELD_NAMES)
+        DictReader.__init__(self,open(bed_fn),delimiter='\t',
+                            fieldnames=BEDOutput.FIELD_NAMES)
 
 
 class RefGeneOutput(object) :
@@ -140,10 +155,43 @@ class RefGeneOutput(object) :
                    'exonFrames',]
 
 
+class RefGeneFile(DictReader) :
+    '''An iterable object (subclasses csv.DictReader) containing the records in
+    the supplied BED formatted file'''
+    def __init__(self,refGene_fn) :
+        refGene_f = open(refGene_fn)
+        # check for header
+        first_line = refGene_f.next()
+        if not first_line.strip().startswith('#') :
+            refGene_f.seek(0) # first line not header, reset the file pointer
+        DictReader.__init__(self,refGene_f,delimiter='\t',fieldnames=RefGeneOutput.FIELD_NAMES)
+
+
+#TODO maybe, finish this
+class RefGeneDB :
+    '''A class for querying RefGene annotation files. NOT DONE.'''
+
+    def __init__(self,refgene_fn) :
+        self._chrom_trees = defaultdict(KeyedBinaryTree)
+        refgene_f = RefGeneFile(refgene_fn)
+        genes = defaultdict(list)
+        for gene in refgene_f :
+            genes[gene['chrom']].append(gene)
+
+        # do stuff to ensure a balanced tree for each chromosome
+        for chrom,gene_list in genes.items() :
+            gene_list.sort(key=lambda x: int(x['txStart']))
+            first_half, second_half = gene_list[:len(gene_list)/2],gene_list[len(gene_list)/2:]
+            first_half.reverse()
+            for i in range(min(len(first_half,second_half))) :
+                to_add = first_half.pop(i)
+                self._chrom_trees[chrom].addNode(int(to_add['txStart']),to_add)
+
 def gerald_to_bed(gerald,min_fields=False) :
     """Convert a GERALDOutput object into a BEDOutput object
 
-    Keyword argument *min_fields* produces BED alignment with only the first three fields populated
+    Keyword argument *min_fields* produces BED alignment with only the first 
+    three fields populated
     """
 
     d = {}.fromkeys(BEDOutput.FIELD_NAMES,'')
@@ -170,8 +218,30 @@ class MACSOutput(object) :
                    'tags',
                    '-10*log10(pvalue)',
                    'fold_enrichment',
-                   'FDR',
+                   'FDR(%)',
                   ]
+
+class MACSFile(DictReader) :
+    '''An iterable object (subclasses csv.DictReader) containing the records in
+    the supplied MACS formatted peak file'''
+    def __init__(self,macs_fn) :
+        self.meta_data = []
+        self.file_info = {}
+        f = open(macs_fn)
+        done_with_header = False
+        while not done_with_header :
+            l = f.next().strip()
+            if l.startswith('#') :
+                if l.count('=') != 0 :
+                    k,v = l.split('=',1)
+                    self.file_info[k.strip()] = parse_number(v.strip())
+                self.meta_data.append(l)
+            elif l == '\t'.join(MACSOutput.FIELD_NAMES) :
+                self.meta_data.append(l)
+                done_with_header = True
+
+        DictReader.__init__(self,f,delimiter='\t',fieldnames=MACSOutput.FIELD_NAMES)
+
 
 
 GLOBAL_SETTINGS_FN = os.path.join(os.path.split(chipsequtil.__file__)[0],'org_settings.cfg')
@@ -230,4 +300,39 @@ def reverse_complement(seq) :
     seq_complement = list(seq.translate(RC_MAP_TABLE))
     seq_complement.reverse()
     return ''.join(seq_complement)
+
+
+def get_gc_content(seq) :
+    '''returns the GC content of a DNA sequence as python string'''
+    seq = seq.lower()
+    return (seq.count('c')+seq.count('g'))/float(len(seq))
+
+
+def get_gc_content_distribution(sequences,bins=100) :
+    '''returns a function that approximates the GC content distibution of the
+    provided sequences.  Approximation is performed by binning.'''
+    gc_contents = [get_gc_content(s) for s in sequences]
+    gc_contents.sort()
+
+    # count up the sequences for each bin
+    bin_counts = [0.]*bins
+    for c in gc_contents :
+        sample_bin = int(math.floor(c*bins))
+        bin_counts[sample_bin] += 1
+
+    # normalize bin counts
+    norm_bins = [x/len(sequences) for x in bin_counts]
+
+    # create a closure for this set of sequences
+    #def f(seq) :
+    #    gc = get_gc_content(seq)
+    #    return norm_bins[int(math.floor(gc*bins))]
+
+    return norm_bins
+
+
+def get_size_distribution(sequences) :
+    return (len(s) for s in sequences)
+
+
 

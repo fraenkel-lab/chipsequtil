@@ -9,16 +9,17 @@ from pprint import pformat
 from chipsequtil import get_org_settings, get_global_settings, get_all_settings, get_local_settings, GLOBAL_SETTINGS_FN, LOCAL_SETTINGS_FN
 
 usage = '%prog [options] [<org key> [<org setting>]]'
-description='Tool for retrieving sets of organism-specific settings and paths. \
-Original paths are set at install time, and can be overridden in the file ~/.org_\
-settings.cfg. Allows (eventually, not done yet) output of settings in a variety \
-of shell environment syntaxes.  When run with an argument, settings are written \
-to stdout by default in python pprint.pprint() repr() format.  When run without \
-an argument, returns a listing of all settings available.'
+description='''Tool for retrieving sets of organism-specific settings and paths.
+Original paths are set at install time, and can be overridden in the file ~/.org
+settings.cfg. Allows output of settings in a variety of shell environment
+syntaxes.  The tool attempts to guess which shell environment is being used by
+examining the SHELL environment variable unless explicitly set.  When run without
+an argument, returns a listing of all settings available.
+'''
 parser = OptionParser(usage=usage,description=description)
 parser.add_option('-s','--syntax',dest='syntax',type='choice',\
-                  choices=['python','bash'],default='python',help='syntax flavor \
-                  of output to produce [default: %default]')
+                  choices=['auto','python','bash','tcsh'],default='auto',help='syntax flavor \
+                  of output to produce [default: %auto]')
 parser.add_option('-l','--list',dest='list_sets',action='store_true',help='print \
                   all available settings for human consumption')
 
@@ -31,12 +32,18 @@ def obj_to_format(obj,format='python') :
     format -- python (default), or bash
     '''
 
+    if format == 'auto' :
+        format = os.environ.get('SHELL','python').split('/')[-1]
+
     r = ''
     if format == 'python' :
         r = pformat(obj)
-    elif format == 'bash' :
+    elif format in ['sh','bash','zsh','csh','tcsh'] :
         statements = []
-        export_tmpl = 'export %s=%s'
+        if format in ['sh','bash','zsh'] :
+            export_tmpl = 'export %s=%s'
+        elif format in ['csh','tcsh'] :
+            export_tmpl = 'setenv %s %s'
 
         # should only get a string, a dict
         if isinstance(obj,str) :
@@ -51,7 +58,7 @@ def obj_to_format(obj,format='python') :
                         statements.append(export_tmpl%('_'.join([k1,k2]).upper(),\
                                           str(v2)))
                 elif isinstance(v1,str) :
-                    s = '"'+v1+'"' if v1.count(' ') != 0 else str(v1)
+                    s = '\''+v1+'\'' if v1.count(' ') != 0 else str(v1)
                     statements.append(export_tmpl%(k1.upper(),str(s)))
 
         r = '\n'.join(statements)
@@ -70,6 +77,10 @@ if __name__ == '__main__' :
     if len(args) == 0 :
 
         if opts.list_sets :
+
+            # always use python formatting when listing
+            opts.syntax = 'python'
+
             # global settings
             settings = get_global_settings()
             output = 'Global settings: (%s)\n'%GLOBAL_SETTINGS_FN
