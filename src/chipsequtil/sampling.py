@@ -8,7 +8,7 @@ from chipsequtil import get_org_settings, get_gc_content, get_gc_content_distrib
 from nib import NibDB, NibException
 from TAMO.seq import Fasta
 
-def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
+def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False) :
     '''Generate background sequences according to the size, distance from genes,
     and GC content distributions of the supplied foreground sequences.  *fg_dict*
     is a dictionary of <header>:<sequence> items, where the first part of the
@@ -30,7 +30,7 @@ def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
 
     # for each peak find the chromosome, distance to nearest
     # gene, size of peaks in bases, and GC content
-    Nseqs = len(fg_dict)
+    num_samples = len(fg_dict) if not num_samples else num_samples
     dists,sizes=[],[]
 
     for header,seq in fg_dict.items() :
@@ -58,11 +58,7 @@ def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
         min_dist = min(dists_to_genes,key=lambda x : abs(x))
         dists.append(min_dist)
 
-        #minD = min([abs(x) for x in dsts_to])
-        #best = [d for d in D if abs(d) == minD]
-        #dists.append(best[0])
-
-        # calculate # bases and GC content
+        # calculate # bases
         sizes.append(len(seq))
 
     # GC content distribution for the foreground sequences
@@ -84,25 +80,25 @@ def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
             gene_starts.append((key,x[0]))
 
     # generate a bg sequence for every fg sequence
-    for i in range(Nseqs):
-        print '\n%d/%d'%(i,Nseqs),
+    for i in range(num_samples):
+        if verbose : sys.stderr.write('\n%d/%d'%(i,num_samples))
 
         # propose sequences until one is accepted
         accepted_sequence = False
         while not accepted_sequence:
-            print '.',
+            if verbose : sys.stderr.write('. ')
 
             # sample a random distance from the list of distances
-            d = random.sample(dists,1)[0]
+            d = random.choice(dists)
 
             # pick a random gene
-            chrom, coord = random.sample(gene_starts,1)[0]
+            chrom, coord = random.choice(gene_starts)
 
             # propose a starting point for the bg sequence
             midpoint = coord-d+random.randint(-100,100)
 
             # propose a size for the bg sequence
-            size = random.sample(sizes,1)[0]
+            size = random.choice(sizes)
             start = int(midpoint-int(size/2))
             stop = int(midpoint+int(size/2))
 
@@ -116,20 +112,20 @@ def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
             try :
                 nib_title, seq = nib_db.get_fasta(chrom,start,stop,strand)
             except IOError :
-                sys.stderr.write('IOError in NibDB, skipping: %s,%d-%d,%s\n'%(chrom,start,stop,strand))
+                if verbose : sys.stderr.write('IOError in NibDB, skipping: %s,%d-%d,%s\n'%(chrom,start,stop,strand))
                 continue
             except NibException :
-                sys.stderr.write('NibDB.get_fasta error')
+                if verbose : sys.stderr.write('NibDB.get_fasta error\n')
                 continue
 
             # determine the GC bin for this sequence
             gc_content = get_gc_content(seq)
             gc_bin = -1
-            for i in range(bins):
-                win_start=i/float(bins)
-                win_end=(i+1)/float(bins)
-                if gc_content >= win_start and gc_content < win_end:
-                    gc_bin=i
+            for i in range(bins) :
+                win_start = i/float(bins)
+                win_end = (i+1)/float(bins)
+                if gc_content >= win_start and gc_content < win_end :
+                    gc_bin = i
                     continue
 
             # pick a uniform random number such that it does not exceed
@@ -137,33 +133,13 @@ def rejection_sample_bg(fg_dict,organism='mouse',bins=100,) :
             # if the random number is <= the GC content for this
             # proposed sequence, accept, otherwise reject
             r = random.random() * max_gc
-            if r > gc_dist[gc_bin]:
+            if r > gc_dist[gc_bin] :
                 continue
             else:
                 bg_gcs.append(x)
                 bg_sizes.append(size)
                 accepted_sequence = True
-                header = '%s:%d-%d\n'%(chrom,start,stop)
+                header = '%s:%d-%d'%(chrom,start,stop)
                 bg_dict[header] = seq
-
-    ###############################################################
-
-    return bg_dict
-
-
-def rejection_sample_bg_chris_wrap(fg_dict,organism='moose') :
-    '''Wrapper for Chris' rej_sampbg function.  Yes, moose.'''
-
-    # write fg sequences to temporary file
-    tmp_fn = '/tmp/tmp_fg_samp_seqs.fa'
-    Fasta.write(fg_dict,tmp_fn)
-
-    # temporary outfile to use
-    out_fn = '/tmp/tmp_bg_samp_seqs.fa'
-
-    rej_sampbg(tmp_fn,out_fn,organism)
-
-    # load outfile into dictionary
-    bg_dict = Fasta.load(out_fn)
 
     return bg_dict

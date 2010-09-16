@@ -45,11 +45,8 @@ def obj_to_format(obj,format='python') :
         elif format in ['csh','tcsh'] :
             export_tmpl = 'setenv %s %s'
 
-        # should only get a string, a dict
-        if isinstance(obj,str) :
-            return obj
         # dict
-        elif isinstance(obj,dict) :
+        if isinstance(obj,dict) :
             for k1, v1 in obj.items() :
                 # dict of dicts
                 if isinstance(v1,dict) :
@@ -57,9 +54,12 @@ def obj_to_format(obj,format='python') :
                     for k2, v2 in v1.items() :
                         statements.append(export_tmpl%('_'.join([k1,k2]).upper(),\
                                           str(v2)))
-                elif isinstance(v1,str) :
+                else :
+                    v1 = str(v1)
                     s = '\''+v1+'\'' if v1.count(' ') != 0 else str(v1)
                     statements.append(export_tmpl%(k1.upper(),str(s)))
+        else :
+            return str(obj)
 
         r = '\n'.join(statements)
 
@@ -113,7 +113,7 @@ if __name__ == '__main__' :
             try :
                 output = obj_to_format(settings[args[1]],opts.syntax)
             except KeyError :
-                sys.stderr.write('Setting %s not found for %s, choices:\n'+
+                sys.stderr.write('Setting %s not found for %s, choices:\n'%(args[1],args[0])+
                                  pformat(settings.keys())+'\nExiting\n')
                 sys.exit(2)
         else :

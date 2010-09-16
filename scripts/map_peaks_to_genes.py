@@ -26,7 +26,9 @@ parser.add_option('--peaks-format',dest='peaks_fmt',default='MACS',type='choice'
 #parser.add_option('--stats-format',dest='stats_format',type='choice',choices=['human','python'],help='format of summary stats output [default: %default]')
 
 def parse_gene_ref(ref_gene) :
-    reader = DictReader(ref_gene,fieldnames=RefGeneOutput.FIELD_NAMES,delimiter='\t')
+    #FIXME - maybe, if galaxy doesn't work out, figure out how to deal with multiple RefGene mapping formats?
+    fieldnames = ['geneName','name','chrom','strand','txStart','txEnd','cdsStart','cdsEnd','exonCount','exonStarts','exonEnds']
+    reader = DictReader(ref_gene,fieldnames=fieldnames,delimiter='\t')
     gene_ref = dd(list)
     for ref_dict in reader :
         for k,v in ref_dict.items() :
@@ -43,11 +45,6 @@ def parse_gene_ref(ref_gene) :
 
     return gene_ref
 
-def parse_gene_ref_line(l) :
-    l = map(parse_number, l) # coerce to numbers where possible
-    l[9] = map(parse_number, l[9].split(',')) # turn 'x,x,x,...' into list
-    l[10] = map(parse_number, l[10].split(','))
-    return l
 
 if __name__ == '__main__' :
 
@@ -68,7 +65,6 @@ if __name__ == '__main__' :
 
     peaks_reader = DictReader(open(args[1]),fieldnames=fieldnames,delimiter='\t')
 
-
     # default output format:
     # <chromo> <peak loc> <accession #> <gene symbol> <strand> <map type> <map subtype> <score> <dist from feature>
     # score = (peak-TSS)/(TSE-TSS) - peak distance from TSS as fraction of length of gene
@@ -84,13 +80,15 @@ if __name__ == '__main__' :
     ]
     if opts.peak_output != sys.stdout :
         opts.peak_output = open(opts.peak_output,'w')
-    peaks_writer = DictWriter(opts.peak_output,output_fields,delimiter='\t')
+    peaks_writer = DictWriter(opts.peak_output,output_fields,delimiter='\t',lineterminator='\n')
     unique_genes = set()
     map_stats = dd(int)
     for peak in peaks_reader :
 
         # if this is a comment or header line get skip it
-        if peak[peaks_reader.fieldnames[0]].startswith('#') or peak[peaks_reader.fieldnames[0]] == peaks_reader.fieldnames[0] : continue
+        if peak[fieldnames[0]].startswith('#') or \
+           peak[fieldnames[0]] == fieldnames[0] or \
+           peak[fieldnames[0]].startswith('track') : continue
 
         # coerce values to numeric if possible
         for k,v in peak.items() : peak[k] = parse_number(v)
@@ -164,7 +162,7 @@ if __name__ == '__main__' :
             if out_d['map type'] != '' :
 
                 out_d['accession #'] = gene['name']
-                out_d['gene symbol'] = gene['name2']
+                out_d['gene symbol'] = gene['geneName']
                 out_d['strand'] = gene['strand']
 
                 map_stats[out_d['map type']] += 1

@@ -6,7 +6,7 @@ import warnings
 from optparse import OptionParser, OptionGroup
 
 from chipsequtil import get_file_parts, BEDFile
-from chipsequtil.nib import get_nib_seq_batch, validate_nib_file, NibException, NOMASK, MASK, HARDMASK
+from chipsequtil.nib import get_nib_batch, validate_nib_file, NibException, NOMASK, MASK, HARDMASK
 
 usage = '%prog [options] file.nib start end strand [outfile]\n  -- or --\n%prog [options] --batch file.nib batchfile [batchfile ...]'
 description = """A python implementation of Jim Kent's nibFrag utility that allows outputting to \
@@ -113,7 +113,7 @@ if __name__ == '__main__' :
     nbases = validate_nib_file(nib_path)
 
     # output all queries
-    for header, seq in zip(header,seqs) :
+    for header, seq in zip(headers,seqs) :
 
         # write output
         out_f.write(header)

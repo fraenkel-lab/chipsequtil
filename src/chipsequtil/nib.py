@@ -10,7 +10,7 @@ import warnings
 from cStringIO import StringIO
 from collections import defaultdict as dd
 
-from chipsequtil import reverse_complement, get_file_parts
+from chipsequtil import reverse_complement, get_file_parts, BEDFile
 
 
 # module fields
@@ -76,9 +76,10 @@ def get_nib_header(nib_fn,start=0,end=-1,strand='+',name=None,dbHeader=None,tbaH
 
 
 def get_nib_header_batch(nib,queries) :
-    '''Batch method for creating nibFrag headers.  *queries* is a list of 6-tuples
-    (start,end,strand,name,dbHeader,tbaHeader) representing queries as specified by
-    the original nibFrag utility.'''
+    '''Batch method for creating nibFrag headers.  *queries* is a list of at most
+    6-tuples (start,end,strand,name,dbHeader,tbaHeader) representing queries as
+    specified by the original nibFrag utility.  Only start, end, and strand
+    fields are required.'''
 
     nib_path, nib_f = _nib_fd(nib)
 
@@ -87,7 +88,13 @@ def get_nib_header_batch(nib,queries) :
     headers = []
     header_tmpl = '>%(name)s%(db)s\n'
 
-    for start, end, strand, name, dbHeader, tbaHeader in queries :
+    for rec in queries :
+
+        # set some defaults if they are not supplied
+        rec = list(rec)
+        rec.extend([None]*(6-len(rec)))
+        start, end, strand, name, dbHeader, tbaHeader  = rec
+
         if end == -1 :
             end = nbases
         fields = {}
@@ -175,6 +182,13 @@ def get_nib_seq_batch(nib,queries,mask=NOMASK) :
     queries.sort()
 
     for start, end, strand in queries :
+
+        if start < 0 :
+            raise NibException('Received negative start coordinate, this may \n\
+                                indicate a region on mitochondrial DNA that \n\
+                                spans reference sequence start and end.  This \n\
+                                utility cannot handle these cases, aborting.\n\n\
+                                Requested interval: %s (%d,%d)'%(nib_fn,start,end))
 
         start, end = map(int,(start,end))
 
@@ -273,11 +287,11 @@ class NibDB(SeqDB) :
 
         # find all *.nib files in the directories passed
         if isinstance(nib_dirs,str) : # user just provided single directory
-            dir_nibs = [nib_dirs]
-        else :
-            dir_nibs = []
-            for d in nib_dirs :
-                dir_nibs.extend(glob.glob(os.path.join(d,'*.nib')))
+            nib_dirs = [nib_dirs]
+
+        dir_nibs = []
+        for d in nib_dirs :
+            dir_nibs.extend(glob.glob(os.path.join(d,'*.nib')))
 
         if isinstance(nib_fns,str) :
             nib_fns = [nib_fns]
@@ -313,10 +327,64 @@ class NibDB(SeqDB) :
 
     def get_fasta(self,name,start=0,end=-1,strand='+',mask=NOMASK) :
         '''Get the fasta record for the specified arguments, returns (header,sequence)
-        tuple'''
+        tuple.'''
 
         nib_f = self._get_db_map(name)
         return get_nib(nib_f,start,end,strand,mask)
+
+    def get_fasta_batch(self,recs,mask=NOMASK) :
+        '''Batch version of *get_fasta* method.  *recs* is a list of lists/tuples
+        with (<chromo>,<start>,<end>,<strand>). Returns list of (header,sequence)
+        tuples in the same sequence as the input records.  Records do not have
+        to all correspond to the same chromosome.'''
+
+        # gather the records for each chromosome together
+        chrom_recs = dd(list)
+        for i,r in enumerate(recs) :
+            chrom_recs[r[0]].append((i,r)) # recs are (index,<tuple>)
+
+        # extract sequences
+        all_chrom_recs = []
+        for chrom, rec_list in chrom_recs.items() :
+            # sorted lists make sequence extraction efficient
+            rec_list.sort(key=lambda x: x[1][1]) # recs are (index,<tuple>)
+
+            # separate indexes from records, extract for this chromo
+            indexes, c_recs = zip(*rec_list)
+
+            # get_nib_batch requires list of (<start>,<end>,<strand>) tuples, remove
+            # chromo in first position
+            c_recs = [r[1:] for r in c_recs]
+
+            nib_f = self._get_db_map(chrom)
+            headers, seqs = get_nib_batch(nib_f,c_recs,mask)
+
+            # return the sequences to a (index,(header,sequence)) list
+            all_chrom_recs.extend(zip(indexes,zip(headers,seqs)))
+
+        # put the sequences back in the original order
+        all_chrom_recs.sort(key=lambda x: x[0]) # recs are (index,<tuple>) again
+        indexes, recs = zip(*all_chrom_recs)
+
+        return zip(*recs)
+
+    def get_fasta_from_bed(self,bed,mask=NOMASK) :
+        '''Accepts either a chipsequtil.BEDFile instance or a filename for a BED
+        file (used to construct a BEDFile instance) and returns the fasta
+        records for all records in order.'''
+
+        # determine if *bed* is a filename or a BEDFile
+        if isinstance(bed,str) : # filename
+            bed = BEDFile(bed)
+
+        # construct the records
+        recs = []
+        for rec in bed :
+            if rec['chrom'].lower().startswith('track') : # track line, skip
+                continue
+            recs.append((rec['chrom'],int(rec['chromStart']),int(rec['chromEnd']),rec['strand']))
+
+        return self.get_fasta_batch(recs,mask)
 
     def get_seq(self,name,start=0,end=-1,strand='+',mask=NOMASK) :
         '''Extract sequence from sequence *name*. Other arguments are passed

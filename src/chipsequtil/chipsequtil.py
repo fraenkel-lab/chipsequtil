@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 
 from ConfigParser import ConfigParser
 from csv import DictReader
@@ -23,6 +24,29 @@ def parse_number(n) :
         return float(n) if '.' in n else int(n)
     except :
         return n
+
+
+def gerald_to_bed(gerald,min_fields=False) :
+    """Convert a GERALDOutput object into a BEDOutput object
+
+    Keyword argument *min_fields* produces BED alignment with only the first 
+    three fields populated
+    """
+
+    d = {}.fromkeys(BEDOutput.FIELD_NAMES,'')
+
+    # required BED fields
+    d['chrom'] = gerald.match_chromo
+    d['chromStart'] = gerald.match_pos
+    d['chromEnd'] = gerald.match_pos+len(gerald.read)
+
+    # load the remaining information
+    if not min_fields :
+        d['strand'] = '+' if gerald.match_strand == 'F' else '-'
+        # TODO consider encoding single-read alignment score into BED score format
+        # that's it?
+    return BEDOutput(**d)
+
 
 class GERALDOutput :
     """Container for one line of GERALD alignment output"""
@@ -77,6 +101,47 @@ class GERALDOutput :
         """GERALD format exception, raised on malformatted input"""
         pass
 
+
+class SmartFileIter :
+
+    def __init__(self,f) :
+        if not hasattr(self,'FIELD_NAMES') or not hasattr(self,'FIELD_TYPES') :
+            raise Exception('Subclasses must define class members FIELD_NAMES and FIELD_TYPES')
+        if isinstance(f,str) :
+            f = open(f)
+        self._dict_reader = DictReader(f,delimiter='\t',fieldnames=self.FIELD_NAMES)
+        self.fieldnames = self.FIELD_NAMES
+        self.curr_line = self._dict_reader.next()
+
+        if all([self.curr_line[k] is None for k in self.FIELD_NAMES[1:]]) : # probably space delimited, try again
+            f.seek(0)
+            self._dict_reader = DictReader(f,delimiter=' ',fieldnames=self.FIELD_NAMES)
+            self.curr_line = self._dict_reader.next()
+
+        if self.FIELD_NAMES[0] in self.curr_line.values() :
+            self.curr_line = self._dict_reader.next()
+
+    def __iter__(self) :
+        return self
+
+    def __getattr__(self,attr) :
+        try:
+            return self.__dict__[attr]
+        except KeyError :
+            return getattr(self._dict_reader,attr)
+
+    def next(self) :
+        line = self.curr_line
+        for k,f in zip(self.FIELD_NAMES, self.FIELD_TYPES) :
+            try :
+                line[k] = f(line[k])
+            except Exception, e :
+                #sys.stderr.write('Warning: field %s on line %d could not be properly formatted, exception %s\n'%(k,self._dict_reader.reader.line_num,str(e)))
+                line[k] = line[k]
+        self.curr_line = self._dict_reader.next()
+        return line
+
+
 class BEDOutput :
     """Container for one line of BED alignment output"""
 
@@ -127,11 +192,42 @@ class BEDOutput :
         pass
 
 
-class BEDFile(DictReader) :
+class BEDFile(SmartFileIter) :
+    FIELD_NAMES = BEDOutput.FIELD_NAMES
+    FIELD_TYPES = [str,int,int,str,float,str,int,int,str,lambda x: x.split(','), lambda x: x.split(','), lambda x: x.split(',')]
+
+
+class BEDFile_dictreader(DictReader) :
     '''An iterable object (subclasses csv.DictReader) containing the records in
-    the supplied BED formatted file'''
-    def __init__(self,bed_fn) :
-        DictReader.__init__(self,open(bed_fn),delimiter='\t',
+    the supplied BED formatted file.'''
+    FIELD_NAMES = BEDOutput.FIELD_NAMES
+    def __init__(self,bed) :
+        '''*bed* is either a filename or a file-like object representing a BED file'''
+        if isinstance(bed,str) :
+            bed = open(bed)
+        DictReader.__init__(self,bed,delimiter='\t',
+                            fieldnames=BEDOutput.FIELD_NAMES)
+
+
+class AffyBiocFile(DictReader) :
+    '''An iterable object (subclasses csv.DictReader) containing microarray data records in
+    the supplied bioconductor formatted file.'''
+
+    FIELD_NAMES = [ 'ID',
+                    'Symbol',
+                    'Name',
+                    'M',
+                    'A',
+                    't',
+                    'P.Value',
+                    'B'
+                  ]
+
+    def __init__(self,affyfn) :
+        '''*affyfn* is either a filename or a file-like object representing a bioconductor output file'''
+        if isinstance(affyfn,str) :
+            bed = open(bed)
+        DictReader.__init__(self,bed,delimiter='\t',
                             fieldnames=BEDOutput.FIELD_NAMES)
 
 
@@ -166,6 +262,52 @@ class RefGeneFile(DictReader) :
             refGene_f.seek(0) # first line not header, reset the file pointer
         DictReader.__init__(self,refGene_f,delimiter='\t',fieldnames=RefGeneOutput.FIELD_NAMES)
 
+class KnownGeneFile :
+
+    FIELD_NAMES = [ 'name',
+                    'chrom',
+                    'strand',
+                    'txStart',
+                    'txEnd',
+                    'cdsStart',
+                    'cdsEnd',
+                    'exonCount',
+                    'exonStarts',
+                    'exonEnds',
+                    'proteinID',
+                    'alignID',
+                  ]
+
+    # function pointers for correct formatting of field names
+    FIELD_TYPES = [ str,
+                    str,
+                    str,
+                    int,
+                    int,
+                    int,
+                    int,
+                    lambda x: [int(y) for y in x.split(',') if len(y) > 0],
+                    lambda x: [int(y) for y in x.split(',') if len(y) > 0],
+                    lambda x: [int(y) for y in x.split(',') if len(y) > 0],
+                    str,
+                    str,
+                  ]
+
+    def __init__(self,kg_fn) :
+        self.meta_data = []
+        self.file_info = {}
+        f = open(kg_fn)
+        self._dict_reader = DictReader(f,delimiter='\t',fieldnames=KnownGeneFile.FIELD_NAMES)
+
+    def __iter__(self) :
+        return self
+
+    def next(self) :
+        line = self._dict_reader.next()
+        for k,f in zip(self.FIELD_NAMES,self.FIELD_TYPES) :
+            line[k] = f(line[k])
+        return line
+
 
 #TODO maybe, finish this
 class RefGeneDB :
@@ -187,29 +329,8 @@ class RefGeneDB :
                 to_add = first_half.pop(i)
                 self._chrom_trees[chrom].addNode(int(to_add['txStart']),to_add)
 
-def gerald_to_bed(gerald,min_fields=False) :
-    """Convert a GERALDOutput object into a BEDOutput object
 
-    Keyword argument *min_fields* produces BED alignment with only the first 
-    three fields populated
-    """
-
-    d = {}.fromkeys(BEDOutput.FIELD_NAMES,'')
-
-    # required BED fields
-    d['chrom'] = gerald.match_chromo
-    d['chromStart'] = gerald.match_pos
-    d['chromEnd'] = gerald.match_pos+len(gerald.read)
-
-    # load the remaining information
-    if not min_fields :
-        d['strand'] = '+' if gerald.match_strand == 'F' else '-'
-        # TODO consider encoding single-read alignment score into BED score format
-        # that's it?
-    return BEDOutput(**d)
-
-
-class MACSOutput(object) :
+class MACSFile(SmartFileIter) :
     FIELD_NAMES = ['chr',
                    'start',
                    'end',
@@ -220,8 +341,18 @@ class MACSOutput(object) :
                    'fold_enrichment',
                    'FDR(%)',
                   ]
+    FIELD_TYPES = [str,
+                   int,
+                   int,
+                   int,
+                   int,
+                   int,
+                   float,
+                   float,
+                   float,
+                  ]
 
-class MACSFile(DictReader) :
+
     '''An iterable object (subclasses csv.DictReader) containing the records in
     the supplied MACS formatted peak file'''
     def __init__(self,macs_fn) :
@@ -236,13 +367,16 @@ class MACSFile(DictReader) :
                     k,v = l.split('=',1)
                     self.file_info[k.strip()] = parse_number(v.strip())
                 self.meta_data.append(l)
-            elif l == '\t'.join(MACSOutput.FIELD_NAMES) :
+            elif l.startswith('\t'.join(MACSOutput.FIELD_NAMES[:5])) :
                 self.meta_data.append(l)
                 done_with_header = True
 
-        DictReader.__init__(self,f,delimiter='\t',fieldnames=MACSOutput.FIELD_NAMES)
+        SmartFileIter.__init__(self,f)
 
 
+# for backwards compatibility, use MACSFile instead...?
+class MACSOutput(object) :
+    FIELD_NAMES = MACSFile.FIELD_NAMES
 
 GLOBAL_SETTINGS_FN = os.path.join(os.path.split(chipsequtil.__file__)[0],'org_settings.cfg')
 LOCAL_SETTINGS_FN = os.path.expanduser(os.path.join('~','.org_settings.cfg'))
@@ -289,6 +423,11 @@ def get_global_settings() :
 def get_local_settings() :
     '''Returns a dict of the current user's setting/path values'''
     return _get_org_settings(None,src=_LOCAL_SETTINGS)
+
+
+def check_org_settings(org_key,setting_list) :
+    settings = get_org_settings(org_key)
+    return all([s in settings.keys() for s in setting_list])
 
 
 RC_MAP_TABLE = ''.join([chr(i) for i in xrange(256)])

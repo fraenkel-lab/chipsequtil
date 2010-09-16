@@ -1,23 +1,30 @@
 #!/usr/bin/env python
+
+import os
+import re
+import sys
+
 from optparse import OptionParser
 from csv import DictReader, DictWriter
 from chipsequtil import get_file_parts, GERALDOutput
-import sys, os, re
 
 usage = "%prog [options] <GERALD file> [<GERALD file>...]"
 
-description = """Convert the GERALD alignment formatted files into BED format.  Input file named
-<path>/<filename>.<ext> is translated into <path>/<filename>.bed unless --stdout
-is specified, in which case formatted lines are written to standard output.  If
-multiple input files are supplied with the --stdout option all formatted lines
-are concatenated together.  Formatting only occurs for GERALD input lines that
-have a valid Match Position field (i.e. successfully aligned somewhere)."""
+description = """\
+Convert the GERALD alignment formatted files into BED format.  Input file named
+<path>/<filename>.<ext> is translated into <path>/<filename>.bed unless --output
+or --stdout is specified, in which case formatted lines are written to file or
+standard output, respectively.  If multiple input files are supplied with the
+--output or --stdout option all formatted lines are concatenated together.
+Formatting only occurs for GERALD input lines that have a valid Match Position
+field (i.e. successfully aligned somewhere)."""
 
 parser = OptionParser(usage=usage, description=description)
+parser.add_option('--output',dest='output',default=None,help='write all records to file')
 parser.add_option('--stdout',dest='stdout',action='store_true',help='write out all formatted lines to stdout')
 parser.add_option('--min-fields',dest='min_fields',action='store_true',help='only format the first three fields')
 parser.add_option('--pass-only',dest='pass_only',action='store_true',help='only format lines with Y in the Pass Filtering field')
-parser.add_option('--chromo-strip',dest='chromo_strip',default=None,help='pattern to remove from chromo field in BED output (e.g. --chromo-strip=.fa to remve .fa from chrX.fa)')
+parser.add_option('--chromo-strip',dest='chromo_strip',default='.fa',help='pattern to remove from chromo field in BED output (e.g. --chromo-strip=.fa to remve .fa from chrX.fa) [default: %default]')
 
 
 

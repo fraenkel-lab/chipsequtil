@@ -1,0 +1,5 @@
+include README.txt
+include org_settings.cfg.sample
+include setup.*
+recursive-include scripts *.py
+recursive-include src *.py
