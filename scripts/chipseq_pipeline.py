@@ -8,7 +8,7 @@ from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 from pypeline import Pypeline, ProcessPypeStep as PPS
 from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
-from TAMO2.MD.THEME import parser as theme_parser
+from TAMO.MD.THEME import parser as theme_parser
 
 usage = "%prog [options] <organism> <experiment BED alignment filename> [<control BED alignment filename>]"
 description = """1st generation ChIPSeq analysis pipeline:

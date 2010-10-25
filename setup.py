@@ -2,8 +2,11 @@
 
 import os
 import sys
-from distutils.core import setup, run_setup
-from distutils.command.build_py import build_py
+
+from distutils.core import setup
+from ez_setup import use_setuptools
+use_setuptools()
+from setuptools import setup
 
 # convenience is king
 opj = os.path.join
@@ -17,31 +20,31 @@ if not os.path.exists(dist_settings_path) :
                       not work properly.\n'%dist_settings_path)
 
 scripts = ['scripts/chipseq_pipeline.py',
-           'scripts/create_pipeline_script.py',
            'scripts/combine_gerald_stats.py',
+           'scripts/compare_microarray_binding.py',
+           'scripts/create_pipeline_script.py',
+           'scripts/extract_promoters.py',
+           'scripts/filter_bed_by_position_count.py',
+           'scripts/filter_macs_peaks.py',
+           'scripts/filter_mapped_known_genes.py',
+           'scripts/generate_stats_doc.py',
            'scripts/gerald_stats.py',
            'scripts/gerald_to_bed.py',
-           'scripts/rejection_sample_fasta.py',
+           'scripts/integrate_macs_ucsc.py',
+           'scripts/join_mapped_known_genes.py',
+           'scripts/map_peaks_to_genes.py',
+           'scripts/map_peaks_to_known_genes.py',
+           'scripts/nibFrag.py',
+           'scripts/org_settings.py',
            'scripts/peaks_to_fasta.py',
-           'scripts/filter_macs_peaks.py',
+           'scripts/probeset_to_known_gene.py',
+           'scripts/rejection_sample_fasta.py',
            'scripts/sort_bed.py',
            'scripts/split_file.py',
            'scripts/split_qsub.py',
+           'scripts/wait_for_qsub.py',
            'scripts/wqsub.py',
            'scripts/wqsub_drmaa.py',
-           'scripts/wait_for_qsub.py',
-           'scripts/map_peaks_to_genes.py',
-           'scripts/map_peaks_to_known_genes.py',
-           'scripts/join_mapped_known_genes.py',
-           'scripts/compare_microarray_binding.py',
-           'scripts/filter_mapped_known_genes.py',
-           'scripts/filter_bed_by_position_count.py',
-           'scripts/org_settings.py',
-           'scripts/nibFrag.py',
-           'scripts/generate_stats_doc.py',
-           'scripts/probeset_to_known_gene.py',
-           'scripts/compile_THEME_results.py',
-           'scripts/integrate_macs_ucsc.py'
            ]
 
 # setup and install

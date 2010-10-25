@@ -21,7 +21,9 @@ annotation, respectively :
 $> org_settings.py <organism> genome_dir
 $> org_settings.py <organism> refgene_anno_path
 
-Utility prints out generated fasta records to stdout by default.
+Utility prints out generated fasta records to stdout by default.  Input sequences
+from chr20 are mapped to chrX, chr21 are mapped to chrY, and sequences from chrM
+are not used.
 """
 epilog = "Note: script only considers sequences with unique header names, only the last record of those with identical header names is used"
 parser = OptionParser(usage=usage,description=description,formatter=MultiLineHelpFormatter())

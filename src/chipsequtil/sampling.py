@@ -16,11 +16,11 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
 
     >chrX:<start>-<end>
 
-    *organism* is a string that will be used to call the *chipsequtil.get_org_settings*
-    function and uses the 'genome_dir' and 'annotation_path' keys.  *bins* is
-    the number of bins to use for representing the GC content distribution.
-    Function returns a dictionary of <header>:<sequence> items of generated 
-    background sequences.'''
+    *organism* is a string that will be used to call the *chipsequtil.get_org
+    settings* function and uses the 'genome_dir' and 'annotation_path' keys.
+    *bins* is the number of bins to use for representing the GC content
+    distribution.  Function returns a dictionary of <header>:<sequence> items
+    of generated background sequences.'''
 
     nib_db = NibDB(nib_dirs=[get_org_settings(organism)['genome_dir']])
     tss_fn = get_org_settings(organism)['annotation_path']
@@ -39,7 +39,7 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         chrom = header.split(':')[0]
 
         # adjust chromosomes in special cases
-        if re.search('random',chrom) :
+        if re.search('random',chrom.lower()) or chrom.lower() == 'chrm' :
             continue
         if chrom == 'chr20' :
             chrom = 'chrX'
@@ -55,7 +55,13 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
 
         # dsts_to_genes is the distance of this peak from all the genes, find minimum
         dists_to_genes = [(s[0]-midpoint) for s in tss_chr]
-        min_dist = min(dists_to_genes,key=lambda x : abs(x))
+        try :
+            min_dist = min(dists_to_genes,key=lambda x : abs(x))
+        except :
+            err_str = '''Warning: no genes were found for sequence with header
+                         %s, not using to calculate distributions.
+                         '''%header
+            sys.stderr.write(err_str)
         dists.append(min_dist)
 
         # calculate # bases
