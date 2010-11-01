@@ -96,6 +96,8 @@ def input(st,default=None) :
 
 if __name__ == '__main__' :
 
+    term.escape = True
+
     try :
 
         # herro

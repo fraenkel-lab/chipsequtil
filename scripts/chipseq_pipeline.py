@@ -225,7 +225,7 @@ if __name__ == '__main__' :
     # run THEME randomization
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
-    calls = ["THEME2.py %(opts)s --motif-file=%(motif_fn)s --randomization --random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'cv_fn':random_cv_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn,'motif_fn':raw_motif_fn}]
+    calls = ["THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization --random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'cv_fn':random_cv_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn,'motif_fn':raw_motif_fn}]
     steps.append(PPS('Run THEME w/ randomization',calls,env=os.environ))
 
     # compile THEME results
