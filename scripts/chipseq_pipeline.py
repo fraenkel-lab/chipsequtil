@@ -52,7 +52,7 @@ parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort
 parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
 parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py',help='the executable to use for generating background sequences for THEME, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
-parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
+parser.add_option('--theme-args',dest='theme_args',default='--no-refine --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
 #parser.add_option('--parallelize',dest='parallelize',default=False,action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
 
