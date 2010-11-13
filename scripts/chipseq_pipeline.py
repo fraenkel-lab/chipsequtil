@@ -125,7 +125,8 @@ if __name__ == '__main__' :
         cnt_wrk_dir = os.path.abspath('.cnt_%s_%s'%(cnt_fbase,opts.exp_name))
 
     # the pipeline
-    pipeline = Pypeline()
+    log_fn = os.path.join(opts.exp_name+'_pipeline.log')
+    pipeline = Pypeline('Analysis pipeline for %s'%opts.exp_name,log=log_fn)
 
     steps = []
 
