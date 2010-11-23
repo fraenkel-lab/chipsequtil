@@ -5,7 +5,7 @@ from subprocess import Popen, PIPE
 import sys
 from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 
-from pypeline import Pypeline, ProcessPypeStep as PPS
+from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS
 from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
 from TAMO.MD.THEME import parser as theme_parser
@@ -18,9 +18,9 @@ description = """1st generation ChIPSeq analysis pipeline:
   - maps peaks to genes
   - extracts fasta files for gene peaks in experiments
   - constructs background sequences matching foreground distribution
-  - runs THEME.py on input sequences
-  - runs THEME.py randomization
-  - creates documentation on entire pipeline run
+  - runs THEME.py on input sequences w/o refinement
+  - finds significantly enriched motifs
+  - runs THEME.py w/ refinement on most significant motifs
 
 Control input file is optional.  *organism* argument is passed to the
 *org_settings.py* command to specify organism specific parameters, ensure
@@ -51,8 +51,9 @@ parser.add_option('--map-args',dest='map_args',default='--tss --upstream-window=
 parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort-by=pvalue --top=200',help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
 parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
 parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py',help='the executable to use for generating background sequences for THEME, if not an absolute path it needs to be on your shell environment path [default: %default]')
-parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
+parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2.1x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
 parser.add_option('--theme-args',dest='theme_args',default='--no-refine --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
+parser.add_option('--motif-pval-cutoff',dest='motif_pval',type='float',default=1e-5,help='the p-value cutoff for sending non-refined enrichmed motifs to THEME for refinement')
 #parser.add_option('--parallelize',dest='parallelize',default=False,action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
 
@@ -126,7 +127,7 @@ if __name__ == '__main__' :
 
     # the pipeline
     log_fn = os.path.join(opts.exp_name+'_pipeline.log')
-    pipeline = Pypeline('Analysis pipeline for %s'%opts.exp_name,log=log_fn)
+    pipeline = Pypeline('\nAnalysis pipeline for %s'%opts.exp_name,log=log_fn)
 
     steps = []
 
@@ -148,10 +149,10 @@ if __name__ == '__main__' :
         cnt_flag = '-c %s'%control_fn
 
     # parse macs_args so we can extract mfold and pvalue...in a rather silly way
-    macs_mfold = [x for x in opts.macs_args.split(' ') if x.find('mfold') != -1]
+    macs_mfold = [x for x in opts.macs_args.split(' ') if 'mfold' in x]
     macs_mfold = macs_mfold[0].split('=',1)[1] if len(macs_mfold) >= 1 else 'DEF'
 
-    macs_pvalue = [x for x in opts.macs_args.split(' ') if x.find('pvalue') != -1]
+    macs_pvalue = [x for x in opts.macs_args.split(' ') if 'pvalue' in x]
     macs_pvalue = macs_pvalue[0].split('=',1)[1] if len(macs_pvalue) >= 1 else 'DEF'
     macs_name = opts.exp_name+'_mfold%s_pval%s'%(macs_mfold,macs_pvalue)
 
@@ -227,12 +228,16 @@ if __name__ == '__main__' :
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
     calls = ["THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization --random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'cv_fn':random_cv_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn,'motif_fn':raw_motif_fn}]
-    steps.append(PPS('Run THEME w/ randomization',calls,env=os.environ))
+    steps.append(PPS('Run THEME w/o refinement',calls,env=os.environ))
 
     # compile THEME results
     motif_fn = '%s_motifs_beta%s_cv%s.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > %(motif_fn)s"%{'tamo_motif_fn':raw_motif_fn,'random_fn':random_cv_fn,'motif_fn':motif_fn}]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
+
+    # run THEME w/ refinement based on top motifs by p-value cutoff
+    def get_hyp_indices() :
+        from csv import reader
 
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
