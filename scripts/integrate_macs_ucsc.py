@@ -29,7 +29,7 @@ if __name__ == '__main__' :
 
     organism, stage_dir, stage_url, macs_dir = args
 
-    pipeline = Pypeline('UCSC Integration')
+    pipeline = Pypeline('UCSC Integration',log='ucsc_integ.log')
 
     steps = []
 

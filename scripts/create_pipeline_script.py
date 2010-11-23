@@ -31,7 +31,7 @@ from subprocess import Popen, PIPE
 
 import chipsequtil
 from chipsequtil import get_global_settings, get_local_settings, check_org_settings, GLOBAL_SETTINGS_FN, LOCAL_SETTINGS_FN
-from terminalcontroller import *
+from terminalcontroller import TERM_ESCAPE, announce, warn, error, white, bold
 
 usage = "%prog"
 description = """Script for creating a custom run script for
@@ -96,7 +96,7 @@ def input(st,default=None) :
 
 if __name__ == '__main__' :
 
-    term.escape = True
+    TERM_ESCAPE = True
 
     try :
 
