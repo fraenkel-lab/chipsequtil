@@ -131,6 +131,10 @@ class SmartFileIter :
             return getattr(self._dict_reader,attr)
 
     def next(self) :
+
+        if self.curr_line is None :
+            raise StopIteration()
+
         line = self.curr_line
         for k,f in zip(self.FIELD_NAMES, self.FIELD_TYPES) :
             try :
@@ -138,7 +142,12 @@ class SmartFileIter :
             except Exception, e :
                 #sys.stderr.write('Warning: field %s on line %d could not be properly formatted, exception %s\n'%(k,self._dict_reader.reader.line_num,str(e)))
                 line[k] = line[k]
-        self.curr_line = self._dict_reader.next()
+
+        try :
+            self.curr_line = self._dict_reader.next()
+        except StopIteration :
+            self.curr_line = None
+
         return line
 
 
