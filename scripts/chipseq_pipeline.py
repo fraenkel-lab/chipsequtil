@@ -127,7 +127,7 @@ if __name__ == '__main__' :
 
     # the pipeline
     log_fn = os.path.join(opts.exp_name+'_pipeline.log')
-    pipeline = Pypeline('\nAnalysis pipeline for %s'%opts.exp_name,log=log_fn)
+    pipeline = Pypeline('\nAnalysis pipeline for %s'%opts.exp_name)
 
     steps = []
 
