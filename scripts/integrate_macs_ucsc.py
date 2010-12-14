@@ -49,8 +49,16 @@ if __name__ == '__main__' :
         }
 
     # create bigWig files
-    zcat_treat_call = "zcat %(wiggle_dir)s/treat/*.gz | grep -v '^track' | wigToBigWig -clip stdin %(chrom_sizes)s %(wiggle_dir)s/treat/%(treat_bigwig_fn)s"%d
-    zcat_control_call = "zcat %(wiggle_dir)s/control/*.gz | grep -v '^track' | wigToBigWig -clip stdin %(chrom_sizes)s %(wiggle_dir)s/control/%(control_bigwig_fn)s"%d
+    zcat_treat_call = "zcat %(wiggle_dir)s/treat/*.gz | \
+                       grep -v '^track' | \
+                       sed 's/\.fa//g' | \
+                       wigToBigWig -clip stdin %(chrom_sizes)s \
+                       %(wiggle_dir)s/treat/%(treat_bigwig_fn)s"%d
+    zcat_control_call = "zcat %(wiggle_dir)s/control/*.gz |  \
+                         grep -v '^track' | \
+                         sed 's/\.fa//g' | \
+                         wigToBigWig -clip stdin %(chrom_sizes)s \
+                         %(wiggle_dir)s/control/%(control_bigwig_fn)s"%d
     steps.append(PPS('Convert wig to bigWig',[zcat_treat_call,zcat_control_call]))
 
     # create the staging directory
