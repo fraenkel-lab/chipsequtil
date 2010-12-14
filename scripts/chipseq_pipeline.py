@@ -10,7 +10,7 @@ from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
 from TAMO.MD.THEME import parser as theme_parser
 
-usage = "%prog [options] <organism> <experiment BED alignment filename> [<control BED alignment filename>]"
+usage = "%prog [options] <organism> <experiment alignment filename> [<control alignment filename>]"
 description = """1st generation ChIPSeq analysis pipeline:
 
   - runs MACS to find peaks and sorts peaks by p-value
@@ -127,7 +127,7 @@ if __name__ == '__main__' :
 
     # the pipeline
     log_fn = os.path.join(opts.exp_name+'_pipeline.log')
-    pipeline = Pypeline('\nAnalysis pipeline for %s'%opts.exp_name)
+    pipeline = Pypeline('Analysis pipeline for %s'%opts.exp_name)
 
     steps = []
 
@@ -167,7 +167,7 @@ if __name__ == '__main__' :
               'macs_out':macs_screen_output_fn,
               'gsize':org_settings['genome_size'],
               }
-    calls = ["%(macs_exec)s --gsize=%(gsize)s -t %(exp_fn)s %(cnt_flag)s --name=%(name)s --format=BED %(macs_args)s 2>&1 | tee %(macs_out)s"%macs_d]
+    calls = ["%(macs_exec)s --gsize=%(gsize)s -t %(exp_fn)s %(cnt_flag)s --name=%(name)s %(macs_args)s 2>&1 | tee %(macs_out)s"%macs_d]
     steps.append(PPS('Run MACS',calls,env=os.environ))
 
 
@@ -191,16 +191,31 @@ if __name__ == '__main__' :
     ############################################################################
     map_fn = "%s_genes.txt"%macs_name
     map_stats_fn = "%s_genes_stats.txt"%macs_name
-    #calls = ["map_peaks_to_genes.py %(refGene_fn)s %(peaks_fn)s --map-output=%(map_fn)s --stats-output=%(map_stats_fn)s"%{'refGene_fn':refgene_fn,'peaks_fn':macs_peaks_fn,'map_fn':map_fn,'map_stats_fn':map_stats_fn}]
-    calls = ["map_peaks_to_known_genes.py %(map_args)s --map-output=%(map_fn)s --detail --stats-output=%(map_stats_fn)s %(kg_ref)s %(kg_xref)s %(peaks_fn)s"%{'kg_ref':kg_ref,'kg_xref':kg_xref,'peaks_fn':macs_peaks_fn,'map_fn':map_fn,'map_stats_fn':map_stats_fn,'map_args':opts.map_args}]
+    map_d = {'kg_ref':kg_ref,
+             'kg_xref':kg_xref,
+             'peaks_fn':macs_peaks_fn,
+             'bed_peaks_fn':macs_name+'_peaks.bed',
+             'map_fn':map_fn,
+             'map_stats_fn':map_stats_fn,
+             'map_args':opts.map_args
+            }
+    # make sure peak files don't have .fa at the end of their chromosomes
+    calls = ["sed -i 's/\.fa//g' %(peaks_fn)s %(bed_peaks_fn)s"%map_d]
+    c = "map_peaks_to_known_genes.py %(map_args)s --map-output=%(map_fn)s " + \
+         "--detail --stats-output=%(map_stats_fn)s %(kg_ref)s %(kg_xref)s " + \
+         "%(peaks_fn)s"
+    calls.append(c%map_d)
     steps.append(PPS('Map peaks to genes',calls,env=os.environ))
 
 
     ############################################################################
     # filter macs peaks
     ############################################################################
-    filtered_d = {'filter_peaks_args':opts.filter_peaks_args,'peaks_fn':macs_peaks_fn}
-    filtered_peaks_fn = Popen("filter_macs_peaks.py --print-encoded-fn --encode-filters %(filter_peaks_args)s %(peaks_fn)s"%filtered_d,shell=True,stdout=PIPE).communicate()[0]
+    filtered_d = {'filter_peaks_args':opts.filter_peaks_args,
+                  'peaks_fn':macs_peaks_fn}
+    c = "filter_macs_peaks.py --print-encoded-fn --encode-filters " + \
+        "%(filter_peaks_args)s %(peaks_fn)s"
+    filtered_peaks_fn = Popen(c%filtered_d,shell=True,stdout=PIPE).communicate()[0]
     calls = ["filter_macs_peaks.py --encode-filters %(filter_peaks_args)s %(peaks_fn)s"%filtered_d]
     steps.append(PPS('Filter MACS peaks',calls,env=os.environ))
 
@@ -210,29 +225,48 @@ if __name__ == '__main__' :
     ############################################################################
     # extract foreground and generate background sequences
     fg_fn = filtered_peaks_fn.replace('.xls','.fa')
-    calls = ["peaks_to_fasta.py %(opts)s --output=%(fg_fn)s %(organism)s %(peaks_fn)s"%{'opts':opts.peaks_to_fa_args,'organism':organism,'fg_fn':fg_fn,'peaks_fn':filtered_peaks_fn},]
+    fg_d = {'opts':opts.peaks_to_fa_args,
+            'organism':organism,
+            'fg_fn':fg_fn,
+            'peaks_fn':filtered_peaks_fn}
+    calls = ["peaks_to_fasta.py %(opts)s --output=%(fg_fn)s %(organism)s %(peaks_fn)s"%fg_d]
     steps.append(PPS('Peaks to Fasta',calls,env=os.environ))
 
     bg_fn = "%s_bg.fa"%macs_name
-    calls = ["rejection_sample_fasta.py %(opts)s --output=%(bg_fn)s %(organism)s %(fg_fn)s"%{'opts':opts.bg_args,'organism':organism,'fg_fn':fg_fn,'bg_fn':bg_fn}]
+    bg_d = {'opts':opts.bg_args,
+            'organism':organism,
+            'fg_fn':fg_fn,
+            'bg_fn':bg_fn}
+    calls = ["rejection_sample_fasta.py %(opts)s --output=%(bg_fn)s %(organism)s %(fg_fn)s"%bg_d]
     steps.append(PPS('Generate Background Sequences',calls,env=os.environ))
 
     # run THEME on fg
     theme_opts, theme_args = theme_parser.parse_args(opts.theme_args.split(' '))
     hyp_fn = org_settings['theme_hypotheses']
     markov_fn = org_settings['theme_markov']
-    #calls = ["THEME.py %(opts)s --motif-file=%(motif_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'motif_fn':motif_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn}]
-    #steps.append(PPS('Run THEME on foreground',calls,env=os.environ))
 
     # run THEME randomization
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
-    calls = ["THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization --random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'cv_fn':random_cv_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn,'motif_fn':raw_motif_fn}]
+    theme_d = {'opts':opts.theme_args,
+               'cv_fn':random_cv_fn,
+               'fg_fn':fg_fn,
+               'bg_fn':bg_fn,
+               'hyp':hyp_fn,
+               'markov':markov_fn,
+               'motif_fn':raw_motif_fn}
+    c = "THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization " + \
+        "--random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
+    calls = [c%theme_d]
     steps.append(PPS('Run THEME w/o refinement',calls,env=os.environ))
 
     # compile THEME results
     motif_fn = '%s_motifs_beta%s_cv%s.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > %(motif_fn)s"%{'tamo_motif_fn':raw_motif_fn,'random_fn':random_cv_fn,'motif_fn':motif_fn}]
+    comp_d = {'tamo_motif_fn':raw_motif_fn,
+         'random_fn':random_cv_fn,
+         'motif_fn':motif_fn}
+    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
+             "%(motif_fn)s"%comp_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
     # run THEME w/ refinement based on top motifs by p-value cutoff

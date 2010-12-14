@@ -116,11 +116,17 @@ if __name__ == '__main__' :
         exp_name = exp_name.replace(' ','_') # shhhhhhhh...
 
         ############################################################################
-        # experiment and control BED file
+        # experiment and control file
         ############################################################################
-        exp_path = input('Experiment BED alignment path')
+        align_text = """The pipeline can accept either BED or ELANDEXPORT formatted
+alignment files. ELANDEXPORT is the default format of files provided by the Illumina
+pipeline.  Both experiment and control files must have the same format."""
+        print textwrap.fill(align_text)
+
+        align_fmt = input("Which format are the alignment files in?",'ELANDEXPORT')
+        exp_path = input('Experiment alignment path')
         exp_path = exp_path.strip()
-        cntrl_path = input('Control BED alignment path (leave blank for no control)','none')
+        cntrl_path = input('Control alignment path (leave blank for no control)','none')
         cntrl_path = cntrl_path.strip()
         if cntrl_path == 'none' :
             cntrl_path = ''
@@ -210,7 +216,7 @@ peak data available on the web for integration with UCSC genome browser."""
         pipeline_args = {}
 
         # --macs-args
-        macs_args = ['--mfold=10,30','--tsize=35','--bw=150']
+        macs_args = ['--mfold=10,30','--tsize=35','--bw=150','--format=%s'%align_fmt]
         pval = ''
         while not re.search('^\de-\d+$',pval) :
             pval = input('What p-value should MACS use as a cutoff?','1e-5')
