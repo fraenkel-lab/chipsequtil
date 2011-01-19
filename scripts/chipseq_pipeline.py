@@ -265,8 +265,9 @@ if __name__ == '__main__' :
     comp_d = {'tamo_motif_fn':raw_motif_fn,
          'random_fn':random_cv_fn,
          'motif_fn':motif_fn}
-    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
-             "%(motif_fn)s"%comp_d]
+    c = "compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
+        "%(motif_fn)s"
+    calls = [c%comp_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
     # run THEME w/ refinement based on top motifs by p-value cutoff
