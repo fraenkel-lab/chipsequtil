@@ -118,7 +118,17 @@ if __name__ == '__main__' :
         ############################################################################
         # experiment and control BED file
         ############################################################################
+<<<<<<< Updated upstream
         exp_path = input('Experiment BED alignment path')
+=======
+        align_text = """The pipeline can accept either BED, BOWTIE, or ELANDEXPORT formatted
+alignment files. ELANDEXPORT is the default format of files provided by the Illumina
+pipeline.  Both experiment and control files must have the same format."""
+        print textwrap.fill(align_text)
+
+        align_fmt = input("Which format are the alignment files in?",'ELANDEXPORT')
+        exp_path = input('Experiment alignment path')
+>>>>>>> Stashed changes
         exp_path = exp_path.strip()
         cntrl_path = input('Control BED alignment path (leave blank for no control)','none')
         cntrl_path = cntrl_path.strip()
