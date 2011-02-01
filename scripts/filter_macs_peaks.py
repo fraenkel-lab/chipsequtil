@@ -156,7 +156,7 @@ if __name__ == '__main__' :
            not all([c(int(peak['tags'])) for c in field_filters['tags']]) or \
            not all([c(10**(float(peak['-10*log10(pvalue)'])/-10)) for c in field_filters['pvalue']]) or \
            not all([c(float(peak['fold_enrichment'])) for c in field_filters['fold_enrichment']]) or \
-           not all([c(float(peak['FDR(%)'])) for c in field_filters['FDR(%)']]) :
+           not all([c(float(peak['FDR(%)'])) for c in field_filters['fdr']]) :
            continue
         else :
             pass_recs.append([peak[k] for k in MACSOutput.FIELD_NAMES])
