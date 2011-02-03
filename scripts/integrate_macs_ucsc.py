@@ -4,7 +4,7 @@ import getpass
 import os
 import sys
 from optparse import OptionParser
-from pypeline import Pypeline, ProcessPypeStep as PPS
+from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS
 
 from chipsequtil import get_org_settings
 
@@ -84,14 +84,17 @@ if __name__ == '__main__' :
                'description="%s Control"'%macs_name,
                'bigDataUrl=%(stage_url)s/%(wiggle_dir)s/%(control_bigwig_fn)s'%d]
     control_track = ' '.join(control_track_d)
-    track_str = '\n'.join(['===== Treatment Track =====',
-                          treat_track,
-                          '===== Control Track =====',
+    track_str = '\n'.join([treat_track,
                           control_track])
 
     track_fn = wiggle_dir+'_tracks.txt'
-    track_call = 'cat <<EOF > %(track_fn)s\n%(track_str)s\nEOF'%{'track_str':track_str,'track_fn':track_fn}
-    steps.append(PPS('Generate track lines file',[track_call]))
+    def track_call(track_fn, track_str) :
+        f = open(track_fn,'w')
+        f.write(track_str+'\n')
+        f.close()
+    steps.append(PyPS('Generate track lines file',track_call,
+                      callable_args=(track_fn,track_str))
+                )
 
     #calls = [zcat_treat_call,
     #         zcat_control_call,
