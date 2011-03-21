@@ -8,6 +8,7 @@ from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS
 from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
+from TAMO import MotifTools
 from TAMO.MD.THEME import parser as theme_parser
 
 usage = "%prog [options] <organism> <experiment BED alignment filename> [<control BED alignment filename>]"
@@ -52,7 +53,7 @@ parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort
 parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
 parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py',help='the executable to use for generating background sequences for THEME, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2.1x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
-parser.add_option('--theme-args',dest='theme_args',default='--no-refine --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
+parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
 parser.add_option('--motif-pval-cutoff',dest='motif_pval',type='float',default=1e-5,help='the p-value cutoff for sending non-refined enrichmed motifs to THEME for refinement')
 #parser.add_option('--parallelize',dest='parallelize',default=False,action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
@@ -126,8 +127,8 @@ if __name__ == '__main__' :
         cnt_wrk_dir = os.path.abspath('.cnt_%s_%s'%(cnt_fbase,opts.exp_name))
 
     # the pipeline
-    log_fn = os.path.join(opts.exp_name+'_pipeline.log')
-    pipeline = Pypeline('\nAnalysis pipeline for %s'%opts.exp_name,log=log_fn)
+    #log_fn = os.path.join(opts.exp_name+'_pipeline.log')
+    pipeline = Pypeline('Analysis pipeline for %s'%opts.exp_name)
 
     steps = []
 
@@ -227,17 +228,58 @@ if __name__ == '__main__' :
     # run THEME randomization
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
-    calls = ["THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization --random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"%{'opts':opts.theme_args,'cv_fn':random_cv_fn,'fg_fn':fg_fn,'bg_fn':bg_fn,'hyp':hyp_fn,'markov':markov_fn,'motif_fn':raw_motif_fn}]
+    theme_args_d = {'opts':opts.theme_args,
+                    'cv_fn':random_cv_fn,
+                    'fg_fn':fg_fn,
+                    'bg_fn':bg_fn,
+                    'hyp':hyp_fn,
+                    'markov':markov_fn,
+                    'motif_fn':raw_motif_fn}
+    calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
+                %(opts)s \
+                --motif-file=%(motif_fn)s \
+                --no-refine \
+                --randomization \
+                --random-output=%(cv_fn)s"%theme_args_d]
     steps.append(PPS('Run THEME w/o refinement',calls,env=os.environ))
 
     # compile THEME results
     motif_fn = '%s_motifs_beta%s_cv%s.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > %(motif_fn)s"%{'tamo_motif_fn':raw_motif_fn,'random_fn':random_cv_fn,'motif_fn':motif_fn}]
+    compile_args_d = {'tamo_motif_fn':raw_motif_fn,
+                      'random_fn':random_cv_fn,
+                      'motif_fn':motif_fn}
+    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s \
+              > %(motif_fn)s"%compile_args_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
     # run THEME w/ refinement based on top motifs by p-value cutoff
+    sig_indices_fn = '%s_sig_motif_ids.txt'%macs_name
     def get_hyp_indices() :
-        from csv import reader
+        from csv import DictReader
+
+        indices = []
+        d = DictReader(open(motif_fn),delimiter="\t") 
+        for r in d:
+            indices.append(int(r['motif_index']))
+            if d.reader.line_num > 30 : break
+
+        indices.sort()
+
+        f = open(sig_indices_fn,'w')
+        f.write(','.join(map(str,indices)))
+        f.close()
+
+    # refine significant motifs with THEME
+    steps.append(PyPS('Find significant motif indices',get_hyp_indices))
+
+    refined_motif_fn = '%s_refined_motifs.txt'%macs_name
+    theme_args_d['sig_indices_fn'] = sig_indices_fn
+    theme_args_d['refined_motif_fn'] = refined_motif_fn
+    calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
+                     %(opts)s \
+                     --hyp-indices=$(cat %(sig_indices_fn)s) \
+                     --motif-file=%(refined_motif_fn)s"%theme_args_d]
+    steps.append(PPS('Refine significant motifs w/ THEME',calls))
 
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
