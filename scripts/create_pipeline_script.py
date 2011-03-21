@@ -118,7 +118,7 @@ if __name__ == '__main__' :
         ############################################################################
         # experiment and control file
         ############################################################################
-        align_text = """The pipeline can accept either BED or ELANDEXPORT formatted
+        align_text = """The pipeline can accept either BED, BOWTIE, or ELANDEXPORT formatted
 alignment files. ELANDEXPORT is the default format of files provided by the Illumina
 pipeline.  Both experiment and control files must have the same format."""
         print textwrap.fill(align_text)
