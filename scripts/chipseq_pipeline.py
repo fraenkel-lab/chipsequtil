@@ -55,6 +55,7 @@ parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py'
 parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2.1x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
 parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
 parser.add_option('--motif-pval-cutoff',dest='motif_pval',type='float',default=1e-5,help='the p-value cutoff for sending non-refined enrichmed motifs to THEME for refinement')
+parser.add_option('--top-n-motifs',dest='top_n',type='int',default=30,help='number of top enriched motifs to refine in THEME refinement step')
 #parser.add_option('--parallelize',dest='parallelize',default=False,action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
 
@@ -280,6 +281,53 @@ if __name__ == '__main__' :
                      --hyp-indices=$(cat %(sig_indices_fn)s) \
                      --motif-file=%(refined_motif_fn)s"%theme_args_d]
     steps.append(PPS('Refine significant motifs w/ THEME',calls))
+
+    # extract top n refined motifs by pvalue and corresponding randomization results
+    motif_stuff_d = {'motif_fn': motif_fn,
+                     'hyp_fn': hyp_fn,
+                     'random_cv_fn': random_cv_fn,
+                     'macs_name': macs_name,
+                     'beta': theme_opts.beta,
+                     'cv': theme_opts.cv,
+                     'top_n': opts.top_n
+                     }
+    def extract_motif_stuff(d) :
+
+        import TAMO.MotifTools as mt
+
+        motif_results = open(d['motif_fn'])
+        motifs = mt.load(d['hyp_fn'])
+        rand_results = open(d['random_cv_fn']).readlines()
+
+        motif_results.next() # get rid of the header
+        motif_indices = [int(x.split('\t')[2]) for x in motif_results]
+
+        motif_dirname = 'motif_results'
+        if not os.path.exists(motif_dirname) : os.mkdir(motif_dirname)
+
+        top_motif_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_top%(top_n)d.tamo'%d
+        top_rand_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_rand_top%(top_n)d.txt'%d
+        top_rand_f = open(top_motif_fn,'w')
+
+        top_motifs = []
+        for i in motif_indices :
+            m = motifs[i]
+            mname = '%s_%d'%(m.source.split('\t')[2],i)
+            gif_fn = mt.giflogo(m,mname)
+            os.rename(gif_fn,os.path.join(motif_dirname,gif_fn))
+            mt.save_motifs([m],os.path.join(motif_dirname,mname+'.tamo'))
+            top_motifs.append(motifs[i])
+            top_rand_f.write(rand_results[i]+'\n')
+
+        mt.save_motifs(top_motifs,top_motif_fn)
+        top_rand_f.close()
+    steps.append(PythonPipeStep('Extract top enriched motif info',
+                                extract_motif_stuff,
+                                (motif_stuff_d,)
+                               )
+                )
+
+    # run THEME w/ refinement and w/o randomization
 
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
