@@ -321,7 +321,7 @@ if __name__ == '__main__' :
 
         mt.save_motifs(top_motifs,top_motif_fn)
         top_rand_f.close()
-    steps.append(PythonPipeStep('Extract top enriched motif info',
+    steps.append(PyPS('Extract top enriched motif info',
                                 extract_motif_stuff,
                                 (motif_stuff_d,)
                                )
@@ -368,7 +368,7 @@ if __name__ == '__main__' :
 
         mt.save_motifs(top_motifs,top_motif_fn)
         top_rand_f.close()
-    steps.append(PythonPipeStep('Extract top enriched motif info',
+    steps.append(PyPS('Extract top enriched motif info',
                                 extract_motif_stuff,
                                 (motif_stuff_d,)
                                )
