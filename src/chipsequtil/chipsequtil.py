@@ -364,10 +364,13 @@ class MACSFile(SmartFileIter) :
 
     '''An iterable object (subclasses csv.DictReader) containing the records in
     the supplied MACS formatted peak file'''
-    def __init__(self,macs_fn) :
+    def __init__(self,macs_f) :
         self.meta_data = []
         self.file_info = {}
-        f = open(macs_fn)
+        if isinstance(macs_f,str) :
+            f = open(macs_f)
+        else :
+            f = macs_f
         done_with_header = False
         while not done_with_header :
             l = f.next().strip()

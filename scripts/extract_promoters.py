@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
+import re
 import sys
 from csv import writer
 from optparse import OptionParser
 
+from collections import defaultdict
 
 from chipsequtil import get_org_settings, RefGeneFile
 from chipsequtil.nib import NibDB
@@ -54,13 +56,24 @@ if __name__ == '__main__' :
             id_index = 'name'
 
     seq_recs = []
+    gene_map = defaultdict(list)
     for rec in refgene_f :
         if gene_list and rec[id_index] not in gene_list : continue # skip this one
         st, end = max(0,int(rec['txStart'])-opts.upstream), min(int(rec['txStart'])+opts.downstream,nib_db.db_info[rec['chrom']]['nbases'])
-        seq_recs.append((rec['chrom'],st,end,rec['strand']))
+        key = (rec['chrom'],st,end,rec['strand'])
+        seq_recs.append(key)
+        gene_map[key[:-1]].append(rec['bin']+'/'+rec['name'])
 
     fasta_recs = nib_db.get_fasta_batch(seq_recs)
 
     out_f = open(opts.output,'w') if opts.output else sys.stdout
+    header_regex = re.compile('^.*(chr[0-9MXY]+).*:([0-9]+)-([0-9]+).*$')
     for header, seq in zip(*fasta_recs) :
+        # map sequences back to gene names using the header
+        reg_obj = header_regex.search(header)
+        if reg_obj is not None :
+            chrm,st,end = reg_obj.groups()
+            gene_names = gene_map.get((chrm,int(st),int(end)))
+            if gene_names is not None :
+                header = header.strip()+':'+','.join(gene_names)+'\n'
         out_f.write(header+seq+'\n')

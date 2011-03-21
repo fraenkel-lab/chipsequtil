@@ -27,6 +27,7 @@ parser.add_option('--map-output',dest='peak_output',default=None,help='filename 
 parser.add_option('--stats-output',dest='stats_output',default=sys.stderr,help='filename to output summary stats in conversion [default: stderr]')
 parser.add_option('--peaks-format',dest='peaks_fmt',default='auto',type='choice',choices=['auto','MACS','BED'],help='format of peaks input file [default: %default]')
 parser.add_option('--detail',dest='detail',action='store_true',help='add extra fields to output, see description')
+parser.add_option('--intergenic',dest='intergenic',action='store_true',help='write intergenic peaks to the gene file as well with None as gene ID')
 #parser.add_option('--symbol-xref',dest='symbol_xref',default=None,help='use the kgXref table file supplied to find a gene symbol, output as second column')
 
 # TODO - options
@@ -212,8 +213,11 @@ if __name__ == '__main__' :
                 out_d['map type'] = ''
 
         if not mapped :
-            #out_d['map type'] = 'intergenic'
-            #peaks_writer.writerow(out_d)
+            if opts.intergenic :
+                out_d['knownGeneID'] = 'None'
+                out_d['geneSymbol'] = 'None'
+                out_d['map type'] = 'intergenic'
+                peaks_writer.writerow(out_d)
             map_stats['intergenic'] += 1
 
     if peak_output != sys.stdout :
