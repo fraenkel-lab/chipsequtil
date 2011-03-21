@@ -5,11 +5,7 @@ from subprocess import Popen, PIPE
 import sys
 from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 
-<<<<<<< Updated upstream
 from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS
-=======
-from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep
->>>>>>> Stashed changes
 from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
 from TAMO import MotifTools
