@@ -329,6 +329,53 @@ if __name__ == '__main__' :
 
     # run THEME w/ refinement and w/o randomization
 
+    # extract top n refined motifs by pvalue and corresponding randomization results
+    motif_stuff_d = {'motif_fn': motif_fn,
+                     'hyp_fn': hyp_fn,
+                     'random_cv_fn': random_cv_fn,
+                     'macs_name': macs_name,
+                     'beta': theme_opts.beta,
+                     'cv': theme_opts.cv,
+                     'top_n': opts.top_n
+                     }
+    def extract_motif_stuff(d) :
+
+        import TAMO.MotifTools as mt
+
+        motif_results = open(d['motif_fn'])
+        motifs = mt.load(d['hyp_fn'])
+        rand_results = open(d['random_cv_fn']).readlines()
+
+        motif_results.next() # get rid of the header
+        motif_indices = [int(x.split('\t')[2]) for x in motif_results]
+
+        motif_dirname = 'motif_results'
+        if not os.path.exists(motif_dirname) : os.mkdir(motif_dirname)
+
+        top_motif_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_top%(top_n)d.tamo'%d
+        top_rand_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_rand_top%(top_n)d.txt'%d
+        top_rand_f = open(top_motif_fn,'w')
+
+        top_motifs = []
+        for i in motif_indices :
+            m = motifs[i]
+            mname = '%s_%d'%(m.source.split('\t')[2],i)
+            gif_fn = mt.giflogo(m,mname)
+            os.rename(gif_fn,os.path.join(motif_dirname,gif_fn))
+            mt.save_motifs([m],os.path.join(motif_dirname,mname+'.tamo'))
+            top_motifs.append(motifs[i])
+            top_rand_f.write(rand_results[i]+'\n')
+
+        mt.save_motifs(top_motifs,top_motif_fn)
+        top_rand_f.close()
+    steps.append(PythonPipeStep('Extract top enriched motif info',
+                                extract_motif_stuff,
+                                (motif_stuff_d,)
+                               )
+                )
+
+    # run THEME w/ refinement and w/o randomization
+
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
     calls = [rm_str%{'d':exp_wrk_dir}]
