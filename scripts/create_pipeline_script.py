@@ -75,7 +75,7 @@ Have a nice day."""
 
 
 def wb(st) :
-    sys.stdout.write(white(bold(st))+'\n')
+    sys.stdout.write(white(bold(st)))
 
 
 def input(st,default=None) :
@@ -141,6 +141,7 @@ pipeline.  Both experiment and control files must have the same format."""
         global_settings = get_global_settings()
         local_settings = get_local_settings()
         valid_org_settings = global_settings.keys() + local_settings.keys()
+        valid_org_settings.sort()
 
         org_text = """\
 Below are the organism settings available on this system.  The pipeline will
@@ -152,20 +153,24 @@ add your own to %(local_org)s.  See %(glob_org)s for details.
         print textwrap.fill(org_text%{'org':valid_org_settings[0],'local_org':LOCAL_SETTINGS_FN,'glob_org':GLOBAL_SETTINGS_FN},break_long_words=False)
         print
 
-        wb('Available settings')
+        wb('Available settings\n')
         # global settings
         print 'Global settings: (%s)'%GLOBAL_SETTINGS_FN
-        for org, settings in global_settings.items() :
-            print org
-            for k,v in settings.items() :
-                print ' '*4+k+": "+str(v)
+        org_sets = [(k,global_settings[k]) for k in sorted(global_settings.keys())]
+        for org, settings in org_sets :
+            wb(org.ljust(8))
+            print ':', settings.get('description','No description')
+            #for k,v in settings.items() :
+            #    print ' '*4+k+": "+str(v)
 
         # local settings
         print 'Local settings: (%s)'%LOCAL_SETTINGS_FN
-        for org, settings in local_settings.items() :
-            print org
-            for k,v in settings.items() :
-                print ' '*4+k+": "+str(v)
+        org_sets = [(k,local_settings[k]) for k in sorted(local_settings.keys())]
+        for org, settings in org_sets :
+            wb(org.ljust(8))
+            print ':', settings.get('description','No description')
+            #for k,v in settings.items() :
+            #    print ' '*4+k+": "+str(v)
         org = ''
         all_settings = {}
         all_settings.update(global_settings)
@@ -175,9 +180,9 @@ add your own to %(local_org)s.  See %(glob_org)s for details.
             org = input('Choose organism configuration, one of ('+','.join(valid_org_settings)+')')
 
             # check for the required settings
-            required_settings = ['genome_dir','refgene_anno_path','theme_hypotheses','theme_markov']
+            required_settings = ['description','genome_dir','refgene_anno_path','theme_hypotheses','theme_markov']
             if not check_org_settings(org,required_settings) :
-                warn(textwrap.fill('Selected organism settings must have the following paths defined:\n\
+                warn(textwrap.fill('Selected organism settings must have the following settings defined:\n\
                      %s\n\
                      Either select another organism or define these settings in your local\
                      configuration file.'%required_settings))
@@ -262,7 +267,7 @@ peak data available on the web for integration with UCSC genome browser."""
         # create symlinks for them
         exp_dir,exp_fn = os.path.split(os.path.abspath(exp_path))
         if exp_dir != os.getcwd() :
-            wb('Creating symlink for experiment file...')
+            wb('Creating symlink for experiment file...\n')
             if os.path.exists(exp_fn) :
                 if os.path.realpath(exp_fn) != os.path.abspath(exp_path) : # existing symlink  doesn't point to the same file, prompt to overwrite
                     ans = raw_input('Symlink %s in current directory points to %s but you asked for %s, overwrite symbolic link? y/[n] '%(exp_fn,os.path.realpath(exp_fn),os.path.abspath(exp_path)))
@@ -277,7 +282,7 @@ peak data available on the web for integration with UCSC genome browser."""
         if cntrl_path != '' :
             cntrl_dir,cntrl_fn = os.path.split(os.path.abspath(cntrl_path))
             if cntrl_dir != os.getcwd() :
-                wb('Creating symlink for control file...')
+                wb('Creating symlink for control file...\n')
                 if os.path.exists(cntrl_fn) :
                     if os.path.realpath(cntrl_fn) != os.path.abspath(cntrl_path) : # existing symlink  doesn't point to the same file, prompt to overwrite
                         ans = raw_input('Symlink %s in current directory points to %s but you asked for %s, overwrite symbolic link? y/[n] '%(cntrl_fn,os.path.realpath(cntrl_fn),os.path.abspath(cntrl_path)))
@@ -296,7 +301,7 @@ peak data available on the web for integration with UCSC genome browser."""
         print 'chipseq_pipeline.py --exp-name=%s %s %s --print-args'%(exp_name,ucsc_args,pipeline_args)
         def_args = Popen('chipseq_pipeline.py --exp-name=%s %s %s --print-args'%(exp_name,ucsc_args,pipeline_args),shell=True,stdout=PIPE,stderr=PIPE).communicate()[0]
 
-        wb('Creating script...')
+        wb('Creating script...\n')
         script_fn = '%s_pipeline.sh'%exp_name
         with open(script_fn,'w') as script_f :
             script_f.write(script_template%{'exp_path':exp_fn,'cnt_path':cntrl_fn,'organism':org,'exp_name':exp_name,'def_args':def_args})
