@@ -368,7 +368,7 @@ class MACSFile(SmartFileIter) :
         self.meta_data = []
         self.file_info = {}
         if isinstance(macs_f,str) :
-            f = open(macs_fn)
+            f = open(macs_f)
         else :
             f = macs_f
         done_with_header = False
