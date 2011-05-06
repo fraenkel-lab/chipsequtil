@@ -130,6 +130,7 @@ if __name__ == '__main__' :
             num_peaks += 1
 
         peak_json[peak_fn]['number of peaks'] = num_peaks
+        peak_json[peak_fn]['reads under peaks'] = sum(peak_stats['tags'])
 
         font = {'size':'9'}
         mp.rc('font',**font)
@@ -210,7 +211,7 @@ if __name__ == '__main__' :
 
     # basic experiment stats table
     stat_header = ('','')
-    ident = lambda x: x or 'unknown'
+    Ident = lambda x: x or 'unknown'
     stat_key_labels_fmts = [
                         ('org','Organism',ident),
                         ('analysis path','Analysis Path',ident),
@@ -228,7 +229,7 @@ if __name__ == '__main__' :
     doc.add(ReStSection('MACS Peak File Stats',level=2))
 
     # go through peak files
-    peak_fns = json_d['peak files']
+    peak_recs = json_d['peak files']
     fl_str = lambda x: x and '%.2f'%float(x)
     stat_key_labels_fmts = [
                         ('total tags in treatment','*Treatment Tags*',ident),
@@ -244,16 +245,10 @@ if __name__ == '__main__' :
                         ('MACS version','*MACS version*',ident),
                         ('pvalue cutoff','*p-value cutoff*',lambda x: '1e%d'%int(log(x,10))),
                         ('number of peaks','*number of peaks*',ident),
-                        #('experiment path','Experiment Path',ident),
-                        #('control path','Control Path',ident),
-                        #('format','Read Format',ident),
-                        #('FDR filter','FDR filter',ident),
-                        #('mapping type','Gene Mapping Type',ident),
-                        #('mapping window','Gene Mapping Window',lambda x: '-%s,%s'%tuple(x)),
-                        #('peaks used by THEME','Peaks used by THEME',ident)
+                        ('reads under peaks','*reads under peaks*',ident),
                        ]
 
-    for peak_fn,peak_stats in peak_fns.items() :
+    for peak_fn,peak_stats in peak_recs.items() :
         doc.add(ReStSection(peak_fn,level=3))
         stat_rows = [('*%s*'%label, fmt(peak_stats.get(key))) for key,label,fmt in stat_key_labels_fmts]
         doc.add(ReStSimpleTable(('**Peak stats**',''),stat_rows))
@@ -263,9 +258,10 @@ if __name__ == '__main__' :
         doc.add(ReStImage(peak_stats['fold distribution url']))
         doc.add(ReStImage(peak_stats['fdr distribution url']))
 
-    # gene info
+        # gene info
+        gene_fn = peak_stats['name']+'_genes.txt'
 
-    # now put some motif stuff up there
+        # now put some motif stuff up there
 
     doc.write()
     doc.close()
