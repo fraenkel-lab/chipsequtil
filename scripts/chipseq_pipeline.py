@@ -292,12 +292,12 @@ if __name__ == '__main__' :
     steps.append(PyPS('Find significant motif indices',get_hyp_indices))
 
     refined_motif_fn = '%s_refined_motifs.txt'%macs_name
-    theme_args_d['sig_indices_fn'] = sig_indices_fn
-    theme_args_d['refined_motif_fn'] = refined_motif_fn
+    theme_d['sig_indices_fn'] = sig_indices_fn
+    theme_d['refined_motif_fn'] = refined_motif_fn
     calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
                      %(opts)s \
                      --hyp-indices=$(cat %(sig_indices_fn)s) \
-                     --motif-file=%(refined_motif_fn)s"%theme_args_d]
+                     --motif-file=%(refined_motif_fn)s"%theme_d]
     steps.append(PPS('Refine significant motifs w/ THEME',calls))
 
     # cleanup
