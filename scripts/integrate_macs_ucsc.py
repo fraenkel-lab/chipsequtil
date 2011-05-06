@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import getpass
 import os
 import sys
 from optparse import OptionParser
@@ -49,26 +48,28 @@ if __name__ == '__main__' :
         }
 
     # create bigWig files
-    zcat_treat_call = "zcat %(wiggle_dir)s/treat/*.gz | \
-                       grep -v '^track' | \
-                       sed 's/\.fa//g' | \
-                       wigToBigWig -clip stdin %(chrom_sizes)s \
-                       %(wiggle_dir)s/treat/%(treat_bigwig_fn)s"%d
-    zcat_control_call = "zcat %(wiggle_dir)s/control/*.gz |  \
-                         grep -v '^track' | \
-                         sed 's/\.fa//g' | \
-                         wigToBigWig -clip stdin %(chrom_sizes)s \
-                         %(wiggle_dir)s/control/%(control_bigwig_fn)s"%d
-    steps.append(PPS('Convert wig to bigWig',[zcat_treat_call,zcat_control_call]))
+    zcat_treat_call = "zcat %(wiggle_dir)s/treat/*.gz | " + \
+                       "grep -v '^track' | " + \
+                       "sed 's/\.fa//g' | " + \
+                       "wigToBigWig -clip stdin %(chrom_sizes)s " + \
+                       "%(wiggle_dir)s/treat/%(treat_bigwig_fn)s"
+    zcat_control_call = "zcat %(wiggle_dir)s/control/*.gz | " + \
+                        "grep -v '^track' | " + \
+                        "sed 's/\.fa//g' | " + \
+                         "wigToBigWig -clip stdin %(chrom_sizes)s " + \
+                         "%(wiggle_dir)s/control/%(control_bigwig_fn)s"
+    steps.append(PPS('Convert wig to bigWig',[zcat_treat_call%d,zcat_control_call%d]))
 
     # create the staging directory
     mk_stage_dir_call = "mkdir -p %(stage_dir)s/%(wiggle_dir)s"%d
     steps.append(PPS('Create staging directory',[mk_stage_dir_call]))
 
     # stage bigWig files to staging directory (create links)
-    stage_treat_call = "ln -fs %(pwd)s/%(wiggle_dir)s/treat/%(treat_bigwig_fn)s %(stage_dir)s/%(wiggle_dir)s/%(treat_bigwig_fn)s"%d
-    stage_control_call = "ln -fs %(pwd)s/%(wiggle_dir)s/control/%(control_bigwig_fn)s %(stage_dir)s/%(wiggle_dir)s/%(control_bigwig_fn)s"%d
-    steps.append(PPS('Stage bigWig files',[stage_treat_call,stage_control_call]))
+    stage_treat_call = "ln -fs %(pwd)s/%(wiggle_dir)s/treat/%(treat_bigwig_fn)s " + \
+                       "%(stage_dir)s/%(wiggle_dir)s/%(treat_bigwig_fn)s"
+    stage_control_call = "ln -fs %(pwd)s/%(wiggle_dir)s/control/%(control_bigwig_fn)s " + \
+                       "%(stage_dir)s/%(wiggle_dir)s/%(control_bigwig_fn)s"
+    steps.append(PPS('Stage bigWig files',[stage_treat_call%d,stage_control_call%d]))
 
     # generate track lines for treatment and control
     treat_track_d = ['track',
