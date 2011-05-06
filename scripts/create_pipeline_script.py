@@ -2,6 +2,7 @@
 
 from __future__ import with_statement
 import getpass
+import json
 import os
 import textwrap
 
@@ -37,8 +38,9 @@ usage = "%prog"
 description = """Script for creating a custom run script for
 ChIPSeq/DNAse hypersensitivity experiments.  User is asked for
 paths and settings required for ChIPSeq analysis using the *chipseq_pipeline.py*
-utility and produces an executable run script with helpful
-information on how to run it."""
+utility and produces an executable run script with helpful information on how to
+run it.  Also creates a JSON formatted file containing all the parameters for
+this pipeline run."""
 epilog = "Note: this script only works in Unix-style environments"
 parser = OptionParser(usage=usage,description=description,epilog=epilog)
 
@@ -108,12 +110,19 @@ if __name__ == '__main__' :
         if len(args) > 0 :
             warn("Arguments were passed, but this script doesn't accept any arguments, rudely ignoring them...\n")
 
+        # this dictionary will be used to generate a JSON formatted file with
+        # all the relevant settings for the pipeline
+        json_dict = {}
+
         ############################################################################
         # name of the experiment
         ############################################################################
-        def_path = os.path.split(os.getcwd())[1]
+        def_path = os.path.basename(os.getcwd())
         exp_name = input('Experiment name',def_path)
         exp_name = exp_name.replace(' ','_') # shhhhhhhh...
+
+        json_dict['experiment name'] = exp_name
+        json_dict['analysis path'] = os.getcwd()
 
         ############################################################################
         # experiment and control file
@@ -133,6 +142,9 @@ pipeline.  Both experiment and control files must have the same format."""
 
         if cntrl_path == '' :
             print 'Analysis will be run with no control'
+
+        json_dict['experiment path'] = os.path.realpath(exp_path)
+        json_dict['control path'] = os.path.realpath(cntrl_path) if cntrl_path != '' else 'none'
 
         ############################################################################
         # organism + settings
@@ -189,6 +201,8 @@ add your own to %(local_org)s.  See %(glob_org)s for details.
                 org = ''
         print
 
+        json_dict['org'] = org
+
         ############################################################################
         # UCSC
         ############################################################################
@@ -208,6 +222,9 @@ peak data available on the web for integration with UCSC genome browser."""
                          '--stage-dir=%s'%stage_dir,
                          '--stage-url=%s'%stage_url]
             ucsc_args = ' '.join(ucsc_args)
+
+            json_dict['stage dir'] = stage_dir
+            json_dict['stage url'] = stage_url
 
         # TODO - consider letting user set these on script creation time
         # any utility specific arguments?
@@ -259,6 +276,15 @@ peak data available on the web for integration with UCSC genome browser."""
             filt_args.append('--top=%s'%top)
         pipeline_args['--filter-peaks-args'] = ' '.join(filt_args)
 
+        # each user-specified argument gets its own key
+        json_dict['format'] = align_fmt
+        json_dict['mapping type'] = tss
+        json_dict['mapping window'] = (upstr,downstr)
+        json_dict['FDR filter'] = fdr
+        json_dict['peaks used by THEME'] = top
+
+        # put all the command line utility args in json_dict as its own dict
+        json_dict['pipeline args'] = pipeline_args
 
         ############################################################################
         # done with input, creating script and other stuff
@@ -308,6 +334,11 @@ peak data available on the web for integration with UCSC genome browser."""
             os.chmod(script_f.name,stat.S_IRWXU|stat.S_IRWXG|stat.S_IROTH)
 
         print end_text%{'script_fn':script_fn}
+
+        wb('Creating parameter file...\n')
+        json_fn = '%s_params.json'%exp_name
+        with open(json_fn,'w') as json_f :
+            json.dump(json_dict,json_f,indent=4)
 
     except KeyboardInterrupt :
         sys.stderr.write('\n')
