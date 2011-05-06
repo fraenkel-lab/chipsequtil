@@ -20,7 +20,6 @@ if not os.path.exists(dist_settings_path) :
                       not work properly.\n'%dist_settings_path)
 
 scripts = ['scripts/build_chipseq_infosite.py',
-           'scripts/build_chipseq_json.py',
            'scripts/chipseq_pipeline.py',
            'scripts/combine_gerald_stats.py',
            'scripts/compare_microarray_binding.py',
