@@ -16,9 +16,8 @@ def kl_divergence(p,q) :
     """
     kl_sum = 0.
     for p_i, q_i in zip(p,q) :
-        # we add a little noise to avoid div by 0 errors
-        if p_i != 0 :
-            kl_sum += p_i * math.log(p_i/(q_i+1e-10),2.)
+        if p_i != 0 and q_i != 0 :
+            kl_sum += p_i * math.log(p_i/q_i)
     return kl_sum
 
 def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False) :
@@ -54,10 +53,6 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         # adjust chromosomes in special cases
         if re.search('random',chrom.lower()) or chrom.lower() == 'chrm' :
             continue
-        if chrom == 'chr20' :
-            chrom = 'chrX'
-        elif chrom == 'chr21' :
-            chrom = 'chrY'
 
         # start first int in second field of bed2seq.bedtoseq header
         start = int(header.split(':')[1].split('-')[0])
@@ -71,9 +66,8 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         try :
             min_dist = min(dists_to_genes,key=lambda x : abs(x))
         except :
-            err_str = '''Warning: no genes were found for sequence with header
-                         %s, not using to calculate distributions.
-                         '''%header
+            err_str = 'Warning: no genes were found for sequence with header' \
+                         '%s, not using to calculate distributions.'%header
             sys.stderr.write(err_str)
         dists.append(min_dist)
 
@@ -109,6 +103,7 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         start = int(midpoint-int(size/2))
         stop = int(midpoint+int(size/2))
 
+        #sys.stderr.write("%s:coord=%d size=%d midpoint=%d d=%d\n"%(chrom,coord,size,midpoint,d))
         # if start or stop are negative, skip and try again
         if start < 0 or stop < 0 : seq = None
 
@@ -118,11 +113,11 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         # extract the proposed sequence
         try :
             nib_title, seq = nib_db.get_fasta(chrom,start,stop,strand)
-        except IOError :
+        except IOError, e :
             if verbose : sys.stderr.write('IOError in NibDB, skipping: %s,%d-%d,%s\n'%(chrom,start,stop,strand))
             seq = None
-        except NibException :
-            if verbose : sys.stderr.write('NibDB.get_fasta error\n')
+        except NibException, e :
+            if verbose : sys.stderr.write('NibDB.get_fasta error, %s\n'%e)
             seq = None
 
         header = '%s:%d-%d'%(chrom,start,stop)
@@ -134,16 +129,18 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
     # distance from TSS foreground distributions
     # keep sampling sequences until the distribution stops
     # changing a lot (KL divergence < epsilon)
-    bg_gc_cnts = [0]*bins
+    bg_gc_cnts = [1.]*bins
     converged = False
     epsilon = 1e-5 # small enough? sure!
     if verbose : sys.stderr.write('Building empirical background GC content distribution ')
     while not converged :
 
-        if verbose : sys.stderr.write('.')
-
         # propose a sequence
         header, seq = propose_sequence(dists,gene_starts,sizes,nib_db)
+
+        # sometimes this happens when there is an error, just try again
+        if seq is None :
+            continue
 
         # determine the GC bin for this sequence
         gc_content = get_gc_content(seq)
@@ -166,13 +163,15 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
 
             # calculate the kl divergence between last distribution
             # and current one, stopping if less than epsilon
-            kl_d = kl_divergence(last_gc_p,new_gc_p)
+            kl_d = kl_divergence(new_gc_p,last_gc_p)
+            if verbose : sys.stderr.write('dist to converge: %.3g\r'%(kl_d-epsilon))
             if kl_d < epsilon :
-                break
+                converged = True
+
         else :
             bg_gc_cnts[gc_bin] += 1
 
-    if verbose : sys.stderr.write('done\n')
+    if verbose : sys.stderr.write('\ndone\n')
 
     # add pseudocounts to account for missing data in bg as to avoid
     # inappropriate scaling in rejection sampling step
@@ -192,7 +191,9 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
             # ever happen
             if fg_i >= 1./sum(bg_gc_cnts) :
                 raise Exception('There was a numeric issue in the rejection sampling routine, please try it again')
-            pseudocounts = (fg_i*sum(bg_gc_cnts))/(1-fg_i*len(bg_gc_cnts))
+            sys.stderr.write(str([fg_i,sum(bg_gc_cnts),len(bg_gc_cnts),1.*fg_i*len(bg_gc_cnts),bg_gc_cnts])+'\n')
+            sys.stderr.flush()
+            pseudocounts = (fg_i*sum(bg_gc_cnts))/(1-1.*fg_i*len(bg_gc_cnts))
 
     bg_gc_cnts = map(lambda x: x+pseudocounts/sum(bg_gc_cnts),bg_gc_cnts)
     bg_gc_dist = map(lambda x: x/sum(bg_gc_cnts),bg_gc_cnts)
