@@ -184,11 +184,11 @@ def get_nib_seq_batch(nib,queries,mask=NOMASK) :
     for start, end, strand in queries :
 
         if start < 0 :
-            raise NibException('Received negative start coordinate, this may \n\
-                                indicate a region on mitochondrial DNA that \n\
-                                spans reference sequence start and end.  This \n\
-                                utility cannot handle these cases, aborting.\n\n\
-                                Requested interval: %s (%d,%d)'%(nib_fn,start,end))
+            raise NibException('Received negative start coordinate, this may '\
+                               'indicate a region on mitochondrial DNA that '\
+                               'spans reference sequence start and end.  This '\
+                               'utility cannot handle these cases, aborting. '\
+                               'Requested interval: %s (%d,%d)'%(nib_fn,start,end))
 
         start, end = map(int,(start,end))
 
@@ -197,10 +197,10 @@ def get_nib_seq_batch(nib,queries,mask=NOMASK) :
             end = nbases
 
         if any([nbases < c for c in [start,end]]) :
-            raise NibException('Requested slice (%(start)d,%(end)d) not compatible \
-            with sequence of length %(nbases)d in %(nib_fn)s, aborting\n\nnibFrag \
-            style error: nib read past end of file (%(start)d %(end)d) in file: \
-            %(nib_fn)s'%{'start':start,'end':end,'nbases':nbases,'nib_fn':nib_fn})
+            raise NibException(('Requested slice (%(start)d,%(end)d) not compatible ' \
+            'with sequence of length %(nbases)d in %(nib_fn)s, aborting\n\nnibFrag '\
+            'style error: nib read past end of file (%(start)d %(end)d) in file: '\
+            '%(nib_fn)s')%{'start':start,'end':end,'nbases':nbases,'nib_fn':nib_fn})
 
         # figure out how many bytes to read through
         start_byte,rem_byte = start/2,start%2
