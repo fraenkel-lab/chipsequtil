@@ -20,7 +20,8 @@ def kl_divergence(p,q) :
             kl_sum += p_i * math.log(p_i/q_i)
     return kl_sum
 
-def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False) :
+def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False,
+                        bg_match_epsilon=1e-3) :
     '''Generate background sequences according to the size, distance from genes,
     and GC content distributions of the supplied foreground sequences.  *fg_dict*
     is a dictionary of <header>:<sequence> items, where the first part of the
@@ -65,11 +66,11 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
         dists_to_genes = [(s[0]-midpoint) for s in tss_chr]
         try :
             min_dist = min(dists_to_genes,key=lambda x : abs(x))
+            dists.append(min_dist)
         except :
             err_str = 'Warning: no genes were found for sequence with header' \
-                         '%s, not using to calculate distributions.'%header
+                         ' %s, not using to calculate distributions.\n'%header
             sys.stderr.write(err_str)
-        dists.append(min_dist)
 
         # calculate # bases
         sizes.append(len(seq))
@@ -131,8 +132,8 @@ def rejection_sample_bg(fg_dict,organism,bins=100,num_samples=None,verbose=False
     # changing a lot (KL divergence < epsilon)
     bg_gc_cnts = [1.]*bins
     converged = False
-    epsilon = 1e-5 # small enough? sure!
-    if verbose : sys.stderr.write('Building empirical background GC content distribution ')
+    epsilon = bg_match_epsilon
+    if verbose : sys.stderr.write('Building empirical background GC content distribution\n')
     while not converged :
 
         # propose a sequence
