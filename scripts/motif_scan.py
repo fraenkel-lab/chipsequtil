@@ -76,20 +76,20 @@ if __name__ == '__main__' :
 
     org, peaks_fn, motif_fn = args
 
-    peaks = np.array([(r['chr'],r['start'],r['end'],r['-10*log10(pvalue)']) for r in MACSFile(peaks_fn)])
-    # transpose for convenience - chr is row 1, start is row 2, etc
-    peaks = peaks.T
-
-    # find the sorted order of peaks by descending pvalue
-    peak_pval_inds = peaks[3,].argsort()
-    peak_pval_inds = peak_pval_inds[::-1] # ascending -> descending
-    peaks = peaks[:,peak_pval_inds]
-
-    if opts.top_n is not None :
-        peaks = peaks[:,0:opts.top_n]
+    peaks_dt = np.dtype([('chr',np.str_,13),('start',np.int32),('end',np.int32),('pvalue',np.float64)])
+    peaks = np.array([(r['chr'],r['start'],r['end'],r['-10*log10(pvalue)']) for r in MACSFile(peaks_fn)],dtype=peaks_dt)
 
     # need to cast pvals to floats since they're strings right now
-    peak_pvals = np.cast['float'](peaks[3,:])
+    peak_pvals = np.cast['float'](peaks[:]['pvalue'])
+
+    # find the sorted order of peaks by descending pvalue
+    peak_pval_inds = peak_pvals.argsort()
+    peak_pval_inds = peak_pval_inds[::-1] # ascending -> descending
+    peaks = peaks[peak_pval_inds,:]
+
+    if opts.top_n is not None :
+        peaks = peaks[0:opts.top_n]
+        peak_pvals = peak_pvals[peak_pval_inds][0:opts.top_n]
 
     # extract fasta sequences for these peaks
     nibDb = NibDB(nib_dirs=get_org_settings(org)['genome_dir'])
@@ -97,8 +97,8 @@ if __name__ == '__main__' :
     # get the peak sequences
     sys.stderr.write('Getting peak sequences\n')
     fasta_batch = []
-    for i in range(peaks.shape[1]) :
-        fasta_batch.append((str(peaks[0][i]),int(peaks[1][i]),int(peaks[2][i]),'+'))
+    for i in range(peaks.size) :
+        fasta_batch.append((str(peaks[i]['chr']),int(peaks[i]['start']),int(peaks[i]['end']),'+'))
     fg_fasta_headers, fg_fasta = nibDb.get_fasta_batch(fasta_batch)
 
     # need a dict for background sampling
@@ -109,10 +109,11 @@ if __name__ == '__main__' :
     for h,s in zip(fg_fasta_headers,fg_fasta) :
         h = h.replace('>'+get_org_settings(org)['genome_dir']+'/','')
         h = h.replace('.nib','')
-        fg_fasta_dict[h] = s
+        if len(s) > 150 :
+            fg_fasta_dict[h] = s
 
     # now sample the background sequences
-    sys.stderr.write('Sampling bg sequences\n')
+    sys.stderr.write('Sampling bg sequences (len(fg_fasta)==%d)\n'%(len(fg_fasta_dict)))
     bg_fasta_dict = rejection_sample_bg(fg_fasta_dict,org,bg_match_epsilon=1e-3,verbose=True)
     bg_fasta = bg_fasta_dict.values()
 
