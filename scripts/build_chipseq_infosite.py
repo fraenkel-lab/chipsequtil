@@ -165,7 +165,8 @@ if __name__ == '__main__' :
 
         # save the track lines
         ucsc_track_fn = peak_json[peak_fn]['name']+'_MACS_wiggle_tracks.txt'
-        peak_json[peak_fn]['ucsc tracks'] = open(ucsc_track_fn).readlines()
+        if os.path.exists(ucsc_track_fn) :
+            peak_json[peak_fn]['ucsc tracks'] = open(ucsc_track_fn).readlines()
 
         font = {'size':'9'}
         mp.rc('font',**font)
@@ -326,9 +327,12 @@ if __name__ == '__main__' :
         doc.add(ReStSimpleTable(None,stat_rows))
 
         # UCSC track info
-        ucsc_tbl = ReStSimpleTable(('**UCSC Genome Browser Track Lines**',),
-                                  [[x] for x in peak_stats['ucsc tracks']])
-        doc.add(ucsc_tbl)
+        if peak_stats.has_key('ucsc tracks') :
+            ucsc_tbl = ReStSimpleTable(('**UCSC Genome Browser Track Lines**',),
+                                      [[x] for x in peak_stats['ucsc tracks']])
+            doc.add(ucsc_tbl)
+        else :
+            doc.add(ReStSimpleTable(None,[['UCSC integration was not enabled for this experiment']])
 
 
         # peak quality plots
