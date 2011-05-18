@@ -2,6 +2,7 @@
 
 import os
 from subprocess import Popen, PIPE
+import string
 import sys
 from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 
@@ -47,7 +48,7 @@ parser.add_option('--exp-name',dest='exp_name',default=os.path.basename(os.getcw
 parser.add_option('--bed-args',dest='bed_args',default='--stdout --chromo-strip=.fa',help='double quote wrapped arguments for gerald_to_bed.py [default: %default]')
 #parser.add_option('--stats-args',dest='stats_args',default='',help='double quote wrapped arguments for gerald_stats.py [default: %default]')
 parser.add_option('--macs-exec',dest='macs_exec',default='macs14',help='the executable to use for MACS, if not an absolute path it needs to be on your shell environment path [default: %default]')
-parser.add_option('--macs-args',dest='macs_args',default='--mfold=10,30 --tsize=35 --bw=150 --pvalue=1e-5',help='double quote wrapped arguments for macs, only changing --mfold, --tsize, --bw, and --pvalue recommended [default: %default]')
+parser.add_option('--macs-args',dest='macs_args',default='--pvalue=1e-5',help='double quote wrapped arguments for macs, only changing --mfold, --tsize, --bw, and --pvalue recommended [default: %default]')
 parser.add_option('--map-args',dest='map_args',default='--tss --upstream-window=10000 --downstream-window=10000',help='double quote wrapped arguments for mapping peaks to genes [default: %default]')
 parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort-by=pvalue --top=200',help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
 parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
@@ -257,12 +258,12 @@ if __name__ == '__main__' :
                     'hyp':hyp_fn,
                     'markov':markov_fn,
                     'motif_fn':raw_motif_fn}
-    calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
-                %(opts)s \
-                --motif-file=%(motif_fn)s \
-                --no-refine \
-                --randomization \
-                --random-output=%(cv_fn)s"%theme_args_d]
+    calls = [("THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s " \
+                "%(opts)s " \
+                "--motif-file=%(motif_fn)s " \
+                "--no-refine " \
+                "--randomization " \
+                "--random-output=%(cv_fn)s")%theme_args_d]
     steps.append(PPS('Run THEME w/o refinement',calls,env=os.environ))
 
     # compile THEME results
@@ -270,8 +271,8 @@ if __name__ == '__main__' :
     compile_args_d = {'tamo_motif_fn':raw_motif_fn,
                       'random_fn':random_cv_fn,
                       'motif_fn':motif_fn}
-    calls = ["compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s \
-              > %(motif_fn)s"%compile_args_d]
+    calls = [("compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s " \
+              "> %(motif_fn)s")%compile_args_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
     # run THEME w/ refinement based on top motifs by p-value cutoff
@@ -283,7 +284,7 @@ if __name__ == '__main__' :
         d = DictReader(open(motif_fn),delimiter="\t") 
         for r in d:
             indices.append(int(r['motif_index']))
-            if d.reader.line_num > 30 : break
+            if d.reader.line_num > opts.top_n : break
 
         indices.sort()
 
@@ -292,19 +293,23 @@ if __name__ == '__main__' :
         f.close()
 
     # refine significant motifs with THEME
-    steps.append(PyPS('Find significant motif indices',get_hyp_indices))
+    steps.append(PyPS('Find significant motif indices',get_hyp_indices,silent=True))
 
-    refined_motif_fn = '%s_refined_motifs.txt'%macs_name
+    refined_motif_fn = '%s_refined_motifs.tamo'%macs_name
     theme_args_d['sig_indices_fn'] = sig_indices_fn
     theme_args_d['refined_motif_fn'] = refined_motif_fn
-    calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
-                     %(opts)s \
-                     --hyp-indices=$(cat %(sig_indices_fn)s) \
-                     --motif-file=%(refined_motif_fn)s"%theme_args_d]
+    theme_call = ("THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s " \
+                     "%(opts)s " \
+                     "--hyp-indices=$(cat %(sig_indices_fn)s) " \
+                     "--motif-file=%(refined_motif_fn)s")%theme_args_d
+
+    calls = [theme_call]
     steps.append(PPS('Refine significant motifs w/ THEME',calls))
 
+
     # extract top n refined motifs by pvalue and corresponding randomization results
     motif_stuff_d = {'motif_fn': motif_fn,
+                     'refined_motif_fn': refined_motif_fn,
                      'hyp_fn': hyp_fn,
                      'random_cv_fn': random_cv_fn,
                      'macs_name': macs_name,
@@ -316,12 +321,16 @@ if __name__ == '__main__' :
 
         import TAMO.MotifTools as mt
 
+        UNSAFE_FN_CHARS = '/&;()!'
+        fntrans = string.maketrans(UNSAFE_FN_CHARS,'_'*len(UNSAFE_FN_CHARS))
+
         motif_results = open(d['motif_fn'])
         motifs = mt.load(d['hyp_fn'])
         rand_results = open(d['random_cv_fn']).readlines()
 
         motif_results.next() # get rid of the header
         motif_indices = [int(x.split('\t')[2]) for x in motif_results]
+        motif_indices = motif_indices[:d['top_n']]
 
         motif_dirname = 'motif_results'
         if not os.path.exists(motif_dirname) : os.mkdir(motif_dirname)
@@ -334,6 +343,7 @@ if __name__ == '__main__' :
         for i in motif_indices :
             m = motifs[i]
             mname = '%s_%d'%(m.source.split('\t')[2],i)
+            mname = mname.translate(fntrans)
             gif_fn = mt.giflogo(m,mname)
             os.rename(gif_fn,os.path.join(motif_dirname,gif_fn))
             mt.save_motifs([m],os.path.join(motif_dirname,mname+'.tamo'))
@@ -342,60 +352,13 @@ if __name__ == '__main__' :
 
         mt.save_motifs(top_motifs,top_motif_fn)
         top_rand_f.close()
-    steps.append(PyPS('Extract top enriched motif info',
-                                extract_motif_stuff,
-                                (motif_stuff_d,)
-                               )
-                )
-
-    # run THEME w/ refinement and w/o randomization
-
-    # extract top n refined motifs by pvalue and corresponding randomization results
-    motif_stuff_d = {'motif_fn': motif_fn,
-                     'hyp_fn': hyp_fn,
-                     'random_cv_fn': random_cv_fn,
-                     'macs_name': macs_name,
-                     'beta': theme_opts.beta,
-                     'cv': theme_opts.cv,
-                     'top_n': opts.top_n
-                     }
-    def extract_motif_stuff(d) :
-
-        import TAMO.MotifTools as mt
-
-        motif_results = open(d['motif_fn'])
-        motifs = mt.load(d['hyp_fn'])
-        rand_results = open(d['random_cv_fn']).readlines()
-
-        motif_results.next() # get rid of the header
-        motif_indices = [int(x.split('\t')[2]) for x in motif_results]
-
-        motif_dirname = 'motif_results'
-        if not os.path.exists(motif_dirname) : os.mkdir(motif_dirname)
-
-        top_motif_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_top%(top_n)d.tamo'%d
-        top_rand_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_rand_top%(top_n)d.txt'%d
-        top_rand_f = open(top_motif_fn,'w')
-
-        top_motifs = []
-        for i in motif_indices :
-            m = motifs[i]
-            mname = '%s_%d'%(m.source.split('\t')[2],i)
-            gif_fn = mt.giflogo(m,mname)
-            os.rename(gif_fn,os.path.join(motif_dirname,gif_fn))
-            mt.save_motifs([m],os.path.join(motif_dirname,mname+'.tamo'))
-            top_motifs.append(motifs[i])
-            top_rand_f.write(rand_results[i]+'\n')
-
-        mt.save_motifs(top_motifs,top_motif_fn)
-        top_rand_f.close()
-    steps.append(PyPS('Extract top enriched motif info',
-                                extract_motif_stuff,
-                                (motif_stuff_d,)
-                               )
-                )
-
-    # run THEME w/ refinement and w/o randomization
+    #steps.append(PyPS('Extract top enriched motif info',
+    #                            extract_motif_stuff,
+    #                            (motif_stuff_d,)
+    #                           )
+    #            )
+    calls = ['build_chipseq_infosite.py']
+    steps.append(PPS('Build infosite',calls))
 
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
