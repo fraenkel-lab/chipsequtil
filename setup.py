@@ -44,6 +44,7 @@ scripts = ['scripts/chipseq_pipeline.py',
            'scripts/split_file.py',
            'scripts/split_qsub.py',
            'scripts/wait_for_qsub.py',
+           'scripts/wait_for_jobid.py',
            'scripts/wqsub.py',
            'scripts/wqsub_drmaa.py',
            ]
