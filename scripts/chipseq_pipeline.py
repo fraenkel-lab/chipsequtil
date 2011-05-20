@@ -49,13 +49,13 @@ parser.add_option('--bed-args',dest='bed_args',default='--stdout --chromo-strip=
 parser.add_option('--macs-exec',dest='macs_exec',default='macs14',help='the executable to use for MACS, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--macs-args',dest='macs_args',default='--mfold=10,30 --tsize=35 --bw=150 --pvalue=1e-5',help='double quote wrapped arguments for macs, only changing --mfold, --tsize, --bw, and --pvalue recommended [default: %default]')
 parser.add_option('--map-args',dest='map_args',default='--tss --upstream-window=10000 --downstream-window=10000',help='double quote wrapped arguments for mapping peaks to genes [default: %default]')
-parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort-by=pvalue --top=200',help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
-parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
+parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort-by=pvalue --top=1000',help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
+parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='--fixed-peak-width=100',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
 parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py',help='the executable to use for generating background sequences for THEME, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2.1x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
-parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5',help='double quote wrapped arguments for THEME.py [default: %default]')
+parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5 --trials=100',help='double quote wrapped arguments for THEME.py [default: %default]')
 parser.add_option('--motif-pval-cutoff',dest='motif_pval',type='float',default=1e-5,help='the p-value cutoff for sending non-refined enrichmed motifs to THEME for refinement')
-#parser.add_option('--parallelize',dest='parallelize',default=False,action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
+parser.add_option('--parallelize',dest='parallelize',action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
 
 ucsc_group = OptionGroup(parser,"UCSC Integration Options (with --ucsc)")
@@ -246,29 +246,108 @@ if __name__ == '__main__' :
     hyp_fn = org_settings['theme_hypotheses']
     markov_fn = org_settings['theme_markov']
 
-    # run THEME randomization
-    random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
+    # run THEME w/ randomization by running each motif individuall
+    # this is because TAMO.MD has a memory leak
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
-    theme_d = {'opts':opts.theme_args,
-               'cv_fn':random_cv_fn,
-               'fg_fn':fg_fn,
-               'bg_fn':bg_fn,
-               'hyp':hyp_fn,
-               'markov':markov_fn,
-               'motif_fn':raw_motif_fn}
-    c = "THEME.py %(opts)s --motif-file=%(motif_fn)s --randomization " + \
-        "--random-output=%(cv_fn)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
-    calls = [c%theme_d]
-    steps.append(PPS('Run THEME w/o refinement',calls,env=os.environ))
+    random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
+
+
+    def run_THEME() :
+        motifs = MotifTools.load(hyp_fn)
+        THEME_dir = 'THEME_data'
+        if not os.path.exists(THEME_dir) :
+            os.mkdir(THEME_dir)
+        tamo_fns, rand_fns = [], []
+
+        theme_d = {'opts':opts.theme_args,
+                   'fg_fn':fg_fn,
+                   'bg_fn':bg_fn,
+                   'hyp':hyp_fn,
+                   'markov':markov_fn,
+                   'wqsub':''}
+
+        if opts.parallelize :
+            job_ids = []
+
+        try :
+
+            if opts.parallelize :
+                sys.stderr.write('Dispatching THEME runs\n') 
+
+            for i,m in enumerate(motifs) :
+
+                if opts.parallelize :
+                    theme_d['wqsub'] = 'wqsub.py --wqsub-name=THEME_%d'%i
+
+                tamo_fn = os.path.join(THEME_dir,'%d.tamo'%i)
+                rand_fn = os.path.join(THEME_dir,'%d_rand.txt'%i)
+
+                tamo_fns.append(tamo_fn)
+                rand_fns.append(rand_fn)
+
+                theme_d['motif_fn'] = tamo_fn
+                theme_d['cv_fn'] = rand_fn
+                theme_d['hyp_ind'] = i
+
+                theme_call = "%(wqsub)s THEME.py %(opts)s --hyp-indices=%(hyp_ind)d " \
+                    "--motif-file=%(motif_fn)s --randomization " \
+                    "%(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
+                if opts.parallelize :
+                    sys.stderr.write('%d/%d\r'%(i+1,len(motifs))) 
+                else :
+                    sys.stderr.write(theme_call%theme_d+'\n')
+
+                p = Popen(theme_call%theme_d,shell=True,stdout=PIPE,stderr=PIPE)
+                stdout, stderr = p.communicate()
+
+                if opts.parallelize :
+                    job_ids.append(stdout.strip())
+
+            if opts.parallelize :
+                wait_cmd = "wait_for_jobid.py %s"%" ".join(job_ids)
+                sys.stderr.write(wait_cmd+'\n')
+                p = Popen(wait_cmd,shell=True)
+                p.wait()
+
+            for tamo_fn, rand_fn in zip(tamo_fns,rand_fns) :
+                # cat the files into the parent files
+                cat_tamo = "cat %s >> %s"%(tamo_fn,raw_motif_fn)
+                p = Popen(cat_tamo,shell=True)
+                p.wait()
+                cat_rand = "cat %s >> %s"%(rand_fn,random_cv_fn)
+                p = Popen(cat_rand,shell=True)
+                p.wait()
+
+                if opts.parallelize :
+                    sys.stderr.write('Consolidating THEME files\n') 
+                else :
+                    sys.stderr.write(c1+'\n')
+                    sys.stderr.write(c2+'\n')
+
+        except KeyboardInterrupt :
+            # something happened, delete the running THEME jobs
+            if opts.parallelize :
+                sys.stderr.write('Exception occurred, cleaning up jobs\n')
+                qdel_call = "qdel %s"%" ".join(job_ids)
+                p = Popen(qdel_call,shell=True,stdout=PIPE,stderr=PIPE)
+                p.wait()
+
+        # clean up after wqsub.py if necessary
+        if opts.parallelize :
+            mv_call = "mv -f wqsub_* THEME_data"
+            p = Popen(mv_call,shell=True,stdout=PIPE,stderr=PIPE)
+            p.wait()
+
+    steps.append(PyPS('Run THEME',run_THEME))
 
     # compile THEME results
     motif_fn = '%s_motifs_beta%s_cv%s.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
     comp_d = {'tamo_motif_fn':raw_motif_fn,
          'random_fn':random_cv_fn,
          'motif_fn':motif_fn}
-    c = "compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
+    compile_call = "compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
         "%(motif_fn)s"
-    calls = [c%comp_d]
+    calls = [compile_call%comp_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
     # run THEME w/ refinement based on top motifs by p-value cutoff
@@ -287,26 +366,6 @@ if __name__ == '__main__' :
         f = open(sig_indices_fn,'w')
         f.write(','.join(map(str,indices)))
         f.close()
-
-    # refine significant motifs with THEME
-    steps.append(PyPS('Find significant motif indices',get_hyp_indices))
-
-    refined_motif_fn = '%s_refined_motifs.txt'%macs_name
-    theme_d['sig_indices_fn'] = sig_indices_fn
-    theme_d['refined_motif_fn'] = refined_motif_fn
-    calls = ["THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s \
-                     %(opts)s \
-                     --hyp-indices=$(cat %(sig_indices_fn)s) \
-                     --motif-file=%(refined_motif_fn)s"%theme_d]
-    steps.append(PPS('Refine significant motifs w/ THEME',calls))
-
-    # cleanup
-    rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
-    calls = [rm_str%{'d':exp_wrk_dir}]
-
-    if control_fn :
-         calls.append(rm_str%{'d':cnt_wrk_dir})
-    #steps.append(PPS('Clean up',calls,env=os.environ))
 
     pipeline.add_steps(steps)
     pipeline.run(interactive=not opts.auto)
