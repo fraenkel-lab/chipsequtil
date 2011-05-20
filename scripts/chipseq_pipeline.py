@@ -274,6 +274,7 @@ if __name__ == '__main__' :
         if opts.parallelize :
             job_ids = []
 
+        pipe_or_none = PIPE if opts.parallelize else None
         try :
 
             if opts.parallelize :
@@ -281,7 +282,7 @@ if __name__ == '__main__' :
 
             inds = xrange(len(motifs))
             if theme_opts.hyp_ind != 'all' :
-                inds = theme_opts.hyp_ind
+                inds = [int(i) for i in theme_opts.hyp_ind.split(',')]
 
             for i in inds :
 
@@ -305,11 +306,11 @@ if __name__ == '__main__' :
                     "--random-output=%(cv_fn)s " \
                     "%(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
                 if opts.parallelize :
-                    sys.stderr.write('%d/%d\r'%(i+1,len(motifs))) 
+                    sys.stderr.write('%d/%d\r'%(i+1,len(inds))) 
                 else :
                     sys.stderr.write(theme_call%theme_d+'\n')
 
-                p = Popen(theme_call%theme_d,shell=True,stdout=PIPE,stderr=PIPE)
+                p = Popen(theme_call%theme_d,shell=True,stdout=pipe_or_none,stderr=pipe_or_none)
                 stdout, stderr = p.communicate()
 
                 if opts.parallelize :
