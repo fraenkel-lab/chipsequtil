@@ -135,8 +135,16 @@ pipeline.  Both experiment and control files must have the same format."""
         align_fmt = input("Which format are the alignment files in?",'ELANDEXPORT')
         exp_path = input('Experiment alignment path')
         exp_path = exp_path.strip()
+
+        lims_exp_url = input('Experiment LIMS sample URL, if applicable','none')
+        lims_exp_url = lims_exp_url.strip()
+
         cntrl_path = input('Control alignment path (leave blank for no control)','none')
         cntrl_path = cntrl_path.strip()
+
+        lims_cntrl_url = input('Control LIMS sample URL, if applicable','none')
+        lims_cntrl_url = lims_cntrl_url.strip()
+
         if cntrl_path == 'none' :
             cntrl_path = ''
 
@@ -144,7 +152,9 @@ pipeline.  Both experiment and control files must have the same format."""
             print 'Analysis will be run with no control'
 
         json_dict['experiment path'] = os.path.realpath(exp_path)
+        json_dict['experiment lims url'] = os.path.realpath(lims_exp_url)
         json_dict['control path'] = os.path.realpath(cntrl_path) if cntrl_path != '' else 'none'
+        json_dict['control lims url'] = os.path.realpath(lims_cntrl_url)
 
         ############################################################################
         # organism + settings
