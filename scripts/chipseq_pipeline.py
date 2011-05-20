@@ -249,8 +249,13 @@ if __name__ == '__main__' :
     # run THEME w/ randomization by running each motif individuall
     # this is because TAMO.MD has a memory leak
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
+    if os.path.exists(raw_motif_fn) :
+        os.remove(raw_motif_fn)
+        open(raw_motif_fn,'w') # create blank file
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-
+    if os.path.exists(random_cv_fn) :
+        os.remove(random_cv_fn)
+        open(random_cv_fn,'w') # create blank file
 
     def run_THEME() :
         motifs = MotifTools.load(hyp_fn)
@@ -274,7 +279,13 @@ if __name__ == '__main__' :
             if opts.parallelize :
                 sys.stderr.write('Dispatching THEME runs\n') 
 
-            for i,m in enumerate(motifs) :
+            inds = xrange(len(motifs))
+            if theme_opts.hyp_ind != 'all' :
+                inds = theme_opts.hyp_ind
+
+            for i in inds :
+
+                m = motifs[i]
 
                 if opts.parallelize :
                     theme_d['wqsub'] = 'wqsub.py --wqsub-name=THEME_%d'%i
@@ -291,6 +302,7 @@ if __name__ == '__main__' :
 
                 theme_call = "%(wqsub)s THEME.py %(opts)s --hyp-indices=%(hyp_ind)d " \
                     "--motif-file=%(motif_fn)s --randomization " \
+                    "--random-output=%(cv_fn)s " \
                     "%(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
                 if opts.parallelize :
                     sys.stderr.write('%d/%d\r'%(i+1,len(motifs))) 
@@ -309,6 +321,7 @@ if __name__ == '__main__' :
                 p = Popen(wait_cmd,shell=True)
                 p.wait()
 
+            sys.stderr.write('Consolidating THEME files\n') 
             for tamo_fn, rand_fn in zip(tamo_fns,rand_fns) :
                 # cat the files into the parent files
                 cat_tamo = "cat %s >> %s"%(tamo_fn,raw_motif_fn)
@@ -317,12 +330,6 @@ if __name__ == '__main__' :
                 cat_rand = "cat %s >> %s"%(rand_fn,random_cv_fn)
                 p = Popen(cat_rand,shell=True)
                 p.wait()
-
-                if opts.parallelize :
-                    sys.stderr.write('Consolidating THEME files\n') 
-                else :
-                    sys.stderr.write(c1+'\n')
-                    sys.stderr.write(c2+'\n')
 
         except KeyboardInterrupt :
             # something happened, delete the running THEME jobs
@@ -334,7 +341,7 @@ if __name__ == '__main__' :
 
         # clean up after wqsub.py if necessary
         if opts.parallelize :
-            mv_call = "mv -f wqsub_* THEME_data"
+            mv_call = "mv -f THEME_*.err THEME_*.out THEME_data"
             p = Popen(mv_call,shell=True,stdout=PIPE,stderr=PIPE)
             p.wait()
 
