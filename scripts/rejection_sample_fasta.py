@@ -31,6 +31,7 @@ parser.add_option('-n','--num-seqs',dest='num_seqs',default='1x', help='number o
 parser.add_option('--output',dest='output',default=None,help='file to output fasta records to [default: stdout]')
 parser.add_option('--bed',dest='bed',action='store_true', help='also produce a BED formatted file representing sampled sequences')
 parser.add_option('--bed-output',dest='bed_output',default='output.bed',help='with --bed, file to output BED records to [default: %default]')
+parser.add_option('-v','--verbose',dest='verbose',action='store_true',help='print out debug information')
 
 if __name__ == '__main__' :
 
@@ -62,7 +63,7 @@ if __name__ == '__main__' :
             parser.error("Incorrect format of --num-seqs argument, must either be an integer or a factor ending with x, e.g. 2.5x")
 
     # generate the sequences
-    gen_seqs = rejection_sample_bg(fasta_recs,organism,num_samples=num_seqs)
+    gen_seqs = rejection_sample_bg(fasta_recs,organism,num_samples=num_seqs,verbose=opts.verbose)
 
     # write out to file
     if opts.output :

@@ -4,9 +4,9 @@ import os
 import sys
 
 from distutils.core import setup
-from ez_setup import use_setuptools
-use_setuptools()
-from setuptools import setup
+#from ez_setup import use_setuptools
+#use_setuptools()
+#from setuptools import setup
 
 # convenience is king
 opj = os.path.join
@@ -19,7 +19,8 @@ if not os.path.exists(dist_settings_path) :
                       in distribution root directory.  org_settings.py script may \
                       not work properly.\n'%dist_settings_path)
 
-scripts = ['scripts/chipseq_pipeline.py',
+scripts = ['scripts/build_chipseq_infosite.py',
+           'scripts/chipseq_pipeline.py',
            'scripts/combine_gerald_stats.py',
            'scripts/compare_microarray_binding.py',
            'scripts/create_pipeline_script.py',
@@ -39,6 +40,8 @@ scripts = ['scripts/chipseq_pipeline.py',
            'scripts/nibFrag.py',
            'scripts/org_settings.py',
            'scripts/peaks_to_fasta.py',
+           'scripts/plot_pos_vs_neg_peaks.py',
+           'scripts/plot_peak_loc_dist.py',
            'scripts/probeset_to_known_gene.py',
            'scripts/rejection_sample_fasta.py',
            'scripts/sort_bed.py',
