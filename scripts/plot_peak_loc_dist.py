@@ -135,14 +135,17 @@ if __name__ == '__main__' :
     mp.rc('font',**font)
     fig = mp.figure(figsize=(4,4))
 
+    bin_order = ('intergenic','gene_exon','gene_intron','promoter','after')
+    colors = 'bgrcm'
+
     # pie chart
     #pie_ax_rect = [0.1,0.35, 0.4125,  0.525 ] # left, bottom, width, height
     pie_ax = fig.add_axes((0.15,0.15,0.7,0.7))
     pie_ax.set_title('Gene map distribution\n%d peaks'%num_peaks)
     pie_labels, pie_values = [], []
-    for k,v in unique_peaks.items() :
-        pie_labels.append(k+'\n%d'%(len(v)))
-        pie_values.append(len(v))
+    for k in bin_order :
+        pie_labels.append(k+'\n%d'%(len(unique_peaks[k])))
+        pie_values.append(len(unique_peaks[k]))
     pie_ax.pie(pie_values,labels=pie_labels)
 
     img_fn = fn_base+'_gene_loc.png' if opts.gene_pie_fn is None else opts.gene_pie_fn
@@ -154,7 +157,7 @@ if __name__ == '__main__' :
     pie_ax = fig.add_axes((0.15,0.15,0.7,0.7))
     pie_ax.set_title('Peak map distribution\n%d peaks'%num_peaks)
     pie_labels, pie_values = [], []
-    for k,v in unique_peaks.items() :
+    for k in bin_order :
         pie_labels.append(k+'\n%d'%(loc_dist[k]))
         pie_values.append(loc_dist[k])
     pie_ax.pie(pie_values,labels=pie_labels)
@@ -188,10 +191,11 @@ if __name__ == '__main__' :
         lv[np.isneginf(lv)] = 0.1
         pval_hists[key] = lv
 
-    pval_items = [(k,pval_hists[k]) for k in ('intergenic','gene_exon','gene_intron','promoter','after')]
-    colors = 'bgrcm'
+    pval_items = [(k,pval_hists[k]) for k in bin_order]
+    bar_width = 0.85*(max_pval-min_pval)/(len(bins)-1)
+    print max_pval, min_pval, len(bins)
+    print 'bar_width:',bar_width
     bars = []
-    bar_width = 120
     b = bar_ax.bar(bins[:-1],pval_items[0][1],width=bar_width,color=colors[0])
     bars.append(b)
 
