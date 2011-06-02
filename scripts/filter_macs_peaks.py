@@ -49,7 +49,7 @@ parser.add_option('--encode-filters',dest='encode_filters',action='store_true',h
 parser.add_option('--summary',dest='summary',action='store_true',help='only print out summary information for the filter')
 parser.add_option('--no-header',dest='no_header',action='store_true',help='do not print out header or metadata info')
 
-parser.add_option('--print-encoded-fn',dest='print_encoded_fn',action='store_true',help=SUPPRESS_HELP) # secret ninja option
+parser.add_option('--print-encoded-fn',dest='print_encoded_fn',action='store_true',help="print out the filename that would be created by --encode-filters")
 
 # make condition function objects using closures
 _lt = lambda x,y : x < y
