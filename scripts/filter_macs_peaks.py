@@ -79,7 +79,7 @@ class FilterException(Exception) : pass
 def parse_filter(filter_str) :
     match = filter_regex.search(filter_str.strip())
     if match is None :
-        raise FilterException('Filter %s is formatted incorrectly')
+        raise FilterException('Filter %s is formatted incorrectly'%filter_str)
     low_val, low_test, field, high_test, high_val = match.groups()
     low_val = float(low_val) if low_val else low_val
     high_val = float(high_val) if high_val else high_val
