@@ -62,13 +62,13 @@ if __name__ == '__main__' :
     clf()
 
     # normalize logs for plotting
-    pos_logs_norm = [1-1.*x/max(pos_logs) for x in pos_logs]
-    neg_logs_norm = [1-1.*x/max(neg_logs) for x in neg_logs]
+    pos_logs_norm = [1.-x/max(pos_logs) for x in pos_logs]
+    neg_logs_norm = [1.-x/max(neg_logs) for x in neg_logs]
 
     # calculate pos proportion for each pvalue
     pos_ratio = []
     pos_only = []
-    for pos, neg in zip(pos_cdf_norm,neg_cdf_norm) :
+    for pos, neg in zip(pos_cdf,neg_cdf) :
         #pos_ratio.append(pos/(pos+neg))
         if neg == 0 :
             pos_only.append(pos_ratio[-1])
@@ -93,7 +93,7 @@ if __name__ == '__main__' :
     axis('tight')
     xlabel('-log(p-value)')
     #ylabel('# pos / (# pos + # neg)')
-    ylabel('log(# pos / # neg)')
+    ylabel('log10(# pos / # neg)')
 
     if opts.out_fn is None :
         pos_base_fn, pos_fn_ext = os.path.splitext(pos_fn)
