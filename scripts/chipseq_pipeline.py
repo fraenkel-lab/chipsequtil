@@ -6,7 +6,7 @@ import string
 import sys
 from optparse import OptionParser, OptionGroup, SUPPRESS_HELP
 
-from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS
+from pypeline import Pypeline, ProcessPypeStep as PPS, PythonPypeStep as PyPS, parse_steplist
 from chipsequtil import get_file_parts, get_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
 from TAMO import MotifTools
@@ -44,20 +44,23 @@ unless you really know what you're doing."""
 
 parser = OptionParser(usage=usage,description=description,epilog=epilog,formatter=MultiLineHelpFormatter())
 parser.add_option('--auto',dest='auto',action='store_true',help='run all steps non-interactively (for batch mode, e.g.)')
+parser.add_option('--steplist',dest='steplist',default='',help='with --auto, run specific steps')
 parser.add_option('--exp-name',dest='exp_name',default=os.path.basename(os.getcwd()),help='name for the experiment/pipeline, used for convenience [default: current directory name]')
 parser.add_option('--bed-args',dest='bed_args',default='--stdout --chromo-strip=.fa',help='double quote wrapped arguments for gerald_to_bed.py [default: %default]')
 #parser.add_option('--stats-args',dest='stats_args',default='',help='double quote wrapped arguments for gerald_stats.py [default: %default]')
 parser.add_option('--macs-exec',dest='macs_exec',default='macs14',help='the executable to use for MACS, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--macs-args',dest='macs_args',default='--pvalue=1e-5',help='double quote wrapped arguments for macs, only changing --mfold, --tsize, --bw, and --pvalue recommended [default: %default]')
 parser.add_option('--map-args',dest='map_args',default='--tss --upstream-window=10000 --downstream-window=10000',help='double quote wrapped arguments for mapping peaks to genes [default: %default]')
-parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default='--sort-by=pvalue --top=1000',help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
-parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='--fixed-peak-width=100',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
+parser.add_option('--filter-peaks-args',dest='filter_peaks_args',default="--sort-by=pvalue --top=1000 -f 'tags>20'",help='double quote wrapped arguments for filter_macs_peaks.py [default: %default]')
+parser.add_option('--filter-neg-peaks-args',dest='filter_neg_peaks_args',default="-f 'tags>20'",help='double quote wrapped arguments for filter_macs_peaks.py applied to negative peaks [default: %default]')
+parser.add_option('--peaks-to-fa-args',dest='peaks_to_fa_args',default='--fixed-peak-width=200',help='double quote wrapped arguments for peaks_to_fasta.py [default: %default]')
 parser.add_option('--bg-exec',dest='bg_exec',default='rejection_sample_fasta.py',help='the executable to use for generating background sequences for THEME, if not an absolute path it needs to be on your shell environment path [default: %default]')
 parser.add_option('--bg-args',dest='bg_args',default='--num-seq=2.1x',help='double quote wrapped arguments for background sequence generation utility [default: %default]')
-parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5 --trials=100',help='double quote wrapped arguments for THEME.py [default: %default]')
+parser.add_option('--theme-args',dest='theme_args',default='--beta=0.7 --cv=5 --trials=25',help='double quote wrapped arguments for THEME.py [default: %default]')
 parser.add_option('--motif-pval-cutoff',dest='motif_pval',type='float',default=1e-5,help='the p-value cutoff for sending non-refined enrichmed motifs to THEME for refinement')
 parser.add_option('--parallelize',dest='parallelize',action='store_true',help='parallelize portions of the pipeline using qsub, only works from SGE execution hosts')
 parser.add_option('--ucsc',dest='ucsc',action='store_true',default=False,help='perform tasks for automated integration with UCSC genome browser [default:%default]')
+parser.add_option('--build-infosite-args',dest='infosite_args',default='',help='arguments to pass to build_chipseq_infosite.py [default: None]')
 
 ucsc_group = OptionGroup(parser,"UCSC Integration Options (with --ucsc)")
 ucsc_group.add_option('--stage-dir',dest='stage_dir',default='./',help='root directory where UCSC integration files should be made available [default: %default]')
@@ -91,8 +94,10 @@ if __name__ == '__main__' :
             opt_str = opt.get_opt_string()
             if opt_str in ['--help','--print-args'] :
                 pass
-            elif opt_str in ['--stage-dir','--stage-url'] and not opts.ucsc :
+            elif opt_str == '--steplist' and not opts.auto :
                 pass
+            #elif opt_str in ['--stage-dir','--stage-url'] and not opts.ucsc :
+            #    pass
             #elif opt_str in ['--split-args','--qsub-args'] and not opts.parallelize :
             #    pass
             elif opt.action == 'store' :
@@ -103,6 +108,7 @@ if __name__ == '__main__' :
                     opts_strs.append('    %s=%s'%(opt.get_opt_string(),str(getattr(opts,opt.dest))))
             elif opt.action == 'store_true' and getattr(opts,opt.dest) :
                 opts_strs.append('    %s'%opt.get_opt_string())
+        opts_strs.append('    $@')
         sys.stdout.write(' \\\n'.join(opts_strs)+'\n')
         sys.exit(0)
 
@@ -159,6 +165,7 @@ if __name__ == '__main__' :
     macs_name = opts.exp_name+'_mfold%s_pval%s'%(macs_mfold,macs_pvalue)
 
     macs_peaks_fn = macs_name+'_peaks.xls'
+    macs_neg_peaks_fn = macs_name+'_negative_peaks.xls'
     macs_screen_output_fn = macs_name+'_output.txt'
 
     macs_d = {'exp_fn':experiment_fn,
@@ -192,7 +199,7 @@ if __name__ == '__main__' :
     # map peaks to genes
     ############################################################################
     map_fn = "%s_genes.txt"%macs_name
-    map_stats_fn = "%s_genes_stats.txt"%macs_name
+    map_stats_fn = "%s_genes_stats.xls"%macs_name
     map_d = {'kg_ref':kg_ref,
              'kg_xref':kg_xref,
              'peaks_fn':macs_peaks_fn,
@@ -214,11 +221,17 @@ if __name__ == '__main__' :
     # filter macs peaks
     ############################################################################
     filtered_d = {'filter_peaks_args':opts.filter_peaks_args,
-                  'peaks_fn':macs_peaks_fn}
-    c = "filter_macs_peaks.py --print-encoded-fn --encode-filters " + \
+                  'filter_neg_peaks_args':opts.filter_neg_peaks_args,
+                  'peaks_fn':macs_peaks_fn,
+                  'neg_peaks_fn':macs_neg_peaks_fn
+                 }
+    c = "filter_macs_peaks.py --print-encoded-fn --encode-filters " \
         "%(filter_peaks_args)s %(peaks_fn)s"
     filtered_peaks_fn = Popen(c%filtered_d,shell=True,stdout=PIPE).communicate()[0]
+    filtered_neg_peaks_fn = macs_name + '_negative_peak_filt.xls'
     calls = ["filter_macs_peaks.py --encode-filters %(filter_peaks_args)s %(peaks_fn)s"%filtered_d]
+    if control_fn is not None :
+         calls.append("filter_macs_peaks.py --encode-filters %(filter_neg_peaks_args)s %(neg_peaks_fn)s"%filtered_d)
     steps.append(PPS('Filter MACS peaks',calls,env=os.environ))
 
 
@@ -250,15 +263,9 @@ if __name__ == '__main__' :
     # run THEME w/ randomization by running each motif individuall
     # this is because TAMO.MD has a memory leak
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
-    if os.path.exists(raw_motif_fn) :
-        os.remove(raw_motif_fn)
-        open(raw_motif_fn,'w') # create blank file
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-    if os.path.exists(random_cv_fn) :
-        os.remove(random_cv_fn)
-        open(random_cv_fn,'w') # create blank file
-
     def run_THEME() :
+
         motifs = MotifTools.load(hyp_fn)
         THEME_dir = 'THEME_data'
         if not os.path.exists(THEME_dir) :
@@ -311,7 +318,8 @@ if __name__ == '__main__' :
                 else :
                     sys.stderr.write(theme_call%theme_d+'\n')
 
-                p = Popen(theme_call%theme_d,shell=True,stdout=pipe_or_none,stderr=pipe_or_none)
+                p = Popen(theme_call%theme_d,shell=True,stdout=pipe_or_none,
+                          stderr=pipe_or_none)
                 stdout, stderr = p.communicate()
 
                 if opts.parallelize :
@@ -323,7 +331,16 @@ if __name__ == '__main__' :
                 p = Popen(wait_cmd,shell=True)
                 p.wait()
 
-            sys.stderr.write('Consolidating THEME files\n') 
+            sys.stderr.write('Consolidating THEME files\n')
+
+            if os.path.exists(raw_motif_fn) :
+                os.remove(raw_motif_fn)
+                open(raw_motif_fn,'w') # create blank file
+
+            if os.path.exists(random_cv_fn) :
+                os.remove(random_cv_fn)
+                open(random_cv_fn,'w') # create blank file
+
             for tamo_fn, rand_fn in zip(tamo_fns,rand_fns) :
                 # cat the files into the parent files
                 cat_tamo = "cat %s >> %s"%(tamo_fn,raw_motif_fn)
@@ -346,7 +363,6 @@ if __name__ == '__main__' :
             mv_call = "mv -f THEME_*.err THEME_*.out THEME_data"
             p = Popen(mv_call,shell=True,stdout=PIPE,stderr=PIPE)
             p.wait()
-
     steps.append(PyPS('Run THEME',run_THEME))
 
     # compile THEME results
@@ -359,90 +375,9 @@ if __name__ == '__main__' :
     calls = [compile_call%comp_d]
     steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
 
-    # run THEME w/ refinement based on top motifs by p-value cutoff
-    sig_indices_fn = '%s_sig_motif_ids.txt'%macs_name
-    def get_hyp_indices() :
-        from csv import DictReader
-
-        indices = []
-        d = DictReader(open(motif_fn),delimiter="\t") 
-        for r in d:
-            indices.append(int(r['motif_index']))
-            if d.reader.line_num > opts.top_n : break
-
-        indices.sort()
-
-        f = open(sig_indices_fn,'w')
-        f.write(','.join(map(str,indices)))
-        f.close()
-
-    # refine significant motifs with THEME
-    steps.append(PyPS('Find significant motif indices',get_hyp_indices,silent=True))
-
-    refined_motif_fn = '%s_refined_motifs.tamo'%macs_name
-    theme_args_d['sig_indices_fn'] = sig_indices_fn
-    theme_args_d['refined_motif_fn'] = refined_motif_fn
-    theme_call = ("THEME.py %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s " \
-                     "%(opts)s " \
-                     "--hyp-indices=$(cat %(sig_indices_fn)s) " \
-                     "--motif-file=%(refined_motif_fn)s")%theme_args_d
-
-    calls = [theme_call]
-    steps.append(PPS('Refine significant motifs w/ THEME',calls))
-
-
-    # extract top n refined motifs by pvalue and corresponding randomization results
-    motif_stuff_d = {'motif_fn': motif_fn,
-                     'refined_motif_fn': refined_motif_fn,
-                     'hyp_fn': hyp_fn,
-                     'random_cv_fn': random_cv_fn,
-                     'macs_name': macs_name,
-                     'beta': theme_opts.beta,
-                     'cv': theme_opts.cv,
-                     'top_n': opts.top_n
-                     }
-    def extract_motif_stuff(d) :
-
-        import TAMO.MotifTools as mt
-
-        UNSAFE_FN_CHARS = '/&;()!'
-        fntrans = string.maketrans(UNSAFE_FN_CHARS,'_'*len(UNSAFE_FN_CHARS))
-
-        motif_results = open(d['motif_fn'])
-        motifs = mt.load(d['hyp_fn'])
-        rand_results = open(d['random_cv_fn']).readlines()
-
-        motif_results.next() # get rid of the header
-        motif_indices = [int(x.split('\t')[2]) for x in motif_results]
-        motif_indices = motif_indices[:d['top_n']]
-
-        motif_dirname = 'motif_results'
-        if not os.path.exists(motif_dirname) : os.mkdir(motif_dirname)
-
-        top_motif_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_top%(top_n)d.tamo'%d
-        top_rand_fn = '%(macs_name)s_motifs_beta%(beta)s_cv%(cv)s_rand_top%(top_n)d.txt'%d
-        top_rand_f = open(top_motif_fn,'w')
-
-        top_motifs = []
-        for i in motif_indices :
-            m = motifs[i]
-            mname = '%s_%d'%(m.source.split('\t')[2],i)
-            mname = mname.translate(fntrans)
-            gif_fn = mt.giflogo(m,mname)
-            os.rename(gif_fn,os.path.join(motif_dirname,gif_fn))
-            mt.save_motifs([m],os.path.join(motif_dirname,mname+'.tamo'))
-            top_motifs.append(motifs[i])
-            top_rand_f.write(rand_results[i]+'\n')
-
-        mt.save_motifs(top_motifs,top_motif_fn)
-        top_rand_f.close()
-    #steps.append(PyPS('Extract top enriched motif info',
-    #                            extract_motif_stuff,
-    #                            (motif_stuff_d,)
-    #                           )
-    #            )
-    calls = ['build_chipseq_infosite.py']
-    steps.append(PPS('Build infosite',calls))
+    # build infosite
+    calls = ['build_chipseq_infosite.py %s'%opts.infosite_args]
+    steps.append(PPS('Build infosite',calls,env=os.environ))
 
     # cleanup
     rm_str = "rm -f %(d)s/*.out %(d)s/*.err %(d)s/*.script %(d)s/*.stats %(d)s/*.bed"
@@ -453,4 +388,8 @@ if __name__ == '__main__' :
     #steps.append(PPS('Clean up',calls,env=os.environ))
 
     pipeline.add_steps(steps)
-    pipeline.run(interactive=not opts.auto)
+    if opts.auto and opts.steplist is not None :
+        steplist = parse_steplist(opts.steplist,pipeline)
+    else :
+        steplist = None
+    pipeline.run(interactive=not opts.auto,steplist=steplist)
