@@ -89,7 +89,7 @@ def input(st,default=None) :
 
     out = None
     while out is None :
-        out = raw_input(white(bold(st))+default_str+white(bold(':'))+' ')
+        out = raw_input(white(bold(st))+default_str+white(bold(':'))+' \n')
         if len(out) == 0 :
             out = default
 
@@ -101,6 +101,8 @@ if __name__ == '__main__' :
     TERM_ESCAPE = True
 
     try :
+
+        pipeline_args = {}
 
         # herro
         announce('ChIPSeq Experiment Pipeline Script Generator')
@@ -127,12 +129,13 @@ if __name__ == '__main__' :
         ############################################################################
         # experiment and control file
         ############################################################################
-        align_text = """The pipeline can accept either BED, BOWTIE, or ELANDEXPORT formatted
-alignment files. ELANDEXPORT is the default format of files provided by the Illumina
-pipeline.  Both experiment and control files must have the same format."""
+        align_text = "The pipeline can accept either BED, BOWTIE, SAM, or " \
+        "ELANDEXPORT formatted alignment files. SAM is the default " \
+        "format of files provided by the BMC pipeline.  Both experiment " \
+        "and control files must have the same format."
         print textwrap.fill(align_text)
 
-        align_fmt = input("Which format are the alignment files in?",'ELANDEXPORT')
+        align_fmt = input("Which format are the alignment files in?",'SAM')
         exp_path = input('Experiment alignment path')
         exp_path = exp_path.strip()
 
@@ -152,9 +155,9 @@ pipeline.  Both experiment and control files must have the same format."""
             print 'Analysis will be run with no control'
 
         json_dict['experiment path'] = os.path.realpath(exp_path)
-        json_dict['experiment lims url'] = os.path.realpath(lims_exp_url)
+        json_dict['experiment lims url'] = lims_exp_url
         json_dict['control path'] = os.path.realpath(cntrl_path) if cntrl_path != '' else 'none'
-        json_dict['control lims url'] = os.path.realpath(lims_cntrl_url)
+        json_dict['control lims url'] = lims_cntrl_url
 
         ############################################################################
         # organism + settings
@@ -225,16 +228,17 @@ peak data available on the web for integration with UCSC genome browser."""
         ucsc_integrate = input('Would you like to integrate this analysis with UCSC genome browser [y/n]?','y')
         ucsc_integrate = False if ucsc_integrate == 'n' else True
         ucsc_args = ''
+        stage_dir = '/nfs/antdata/web_stage/%s'%getpass.getuser()
+        stage_url = 'http://fraenkel.mit.edu/stage/%s'%getpass.getuser()
         if ucsc_integrate :
-            stage_dir = '/nfs/antdata/web_stage/%s'%getpass.getuser()
-            stage_url = 'http://fraenkel.mit.edu/stage/%s'%getpass.getuser()
-            ucsc_args = ['--ucsc',
-                         '--stage-dir=%s'%stage_dir,
-                         '--stage-url=%s'%stage_url]
+            ucsc_args = ['--ucsc']
             ucsc_args = ' '.join(ucsc_args)
 
-            json_dict['stage dir'] = stage_dir
-            json_dict['stage url'] = stage_url
+        pipeline_args['--stage-dir'] = stage_dir
+        pipeline_args['--stage-url'] = stage_url
+
+        json_dict['stage dir'] = stage_dir
+        json_dict['stage url'] = stage_url
 
         # TODO - consider letting user set these on script creation time
         # any utility specific arguments?
@@ -245,10 +249,9 @@ peak data available on the web for integration with UCSC genome browser."""
         ############################################################################
         # various pipeline parameters
         ############################################################################
-        pipeline_args = {}
 
         # --macs-args
-        macs_args = ['--mfold=10,30','--tsize=35','--bw=150','--format=%s'%align_fmt]
+        macs_args = ['--mfold=10,30','--format=%s'%align_fmt]
         pval = ''
         while not re.search('^\de-\d+$',pval) :
             pval = input('What p-value should MACS use as a cutoff?','1e-5')
@@ -277,14 +280,38 @@ peak data available on the web for integration with UCSC genome browser."""
             fdr = input('What FDR cutoff should be used, in %?','none')
         if fdr != 'none' :
             filt_args.append("--filter='fdr<%s'"%fdr)
-        pipeline_args['--filter-peaks-args'] = ' '.join(filt_args)
 
         top = ''
         while not re.search('^\d+$',top) and top != 'ALL' :
-            top = input('How many peak sequences should be used for motif discovery when sorted by p-value [<# peaks>/ALL]','200')
+            top = input('How many peak sequences should be used for motif discovery when sorted by p-value [<# peaks>/ALL]','1000')
         if top != 'ALL' :
             filt_args.append('--top=%s'%top)
+
+        # tag filter for both pos and neg peaks
+        tags = ''
+        filt_neg_args = []
+        while not re.search('^\d+$',tags) and tags != 'ALL' :
+            tags = input('What tag count cutoff should be used as a minimum for positive and negative peaks? [<# peaks>/None]','20')
+        if tags != 'None' :
+            filt_args.append("--filter='tags>%s'"%tags)
+            filt_neg_args.append("--filter='tags>%s'"%tags)
         pipeline_args['--filter-peaks-args'] = ' '.join(filt_args)
+        pipeline_args['--filter-neg-peaks-args'] = ' '.join(filt_neg_args)
+
+        # --peaks-to-fa-args
+        peaks_to_fa_args = []
+        width = ''
+        while not re.search('^\d+$',width) and width != 'NA' :
+            width = input('What width around peak summit should be used for motif analysis (NA to use entire peak)? [<# bases>/NA]','200')
+        if width != 'NA' :
+            peaks_to_fa_args.append('--fixed-peak-width=%s'%width)
+        else :
+            width = 'none'
+        pipeline_args['--peaks-to-fa-args'] = ' '.join(peaks_to_fa_args)
+
+        # --parallelize
+        parallel = input('Use cluster parallelization [y/n]?','y')
+        parallel = '--parallelize' if parallel.lower() != 'n' else ''
 
         # each user-specified argument gets its own key
         json_dict['format'] = align_fmt
@@ -292,6 +319,9 @@ peak data available on the web for integration with UCSC genome browser."""
         json_dict['mapping window'] = (upstr,downstr)
         json_dict['FDR filter'] = fdr
         json_dict['peaks used by THEME'] = top
+        json_dict['fixed peak width'] = width
+        json_dict['parallelize'] = parallel != ''
+        json_dict['peak tag count filter'] = tags
 
         # put all the command line utility args in json_dict as its own dict
         json_dict['pipeline args'] = pipeline_args
@@ -335,7 +365,7 @@ peak data available on the web for integration with UCSC genome browser."""
         # get default chipseq_pipeline.py args
         pipeline_args = ' '.join(['%s="%s"'%(k,v) for k,v in pipeline_args.items()])
         print 'chipseq_pipeline.py --exp-name=%s %s %s --print-args'%(exp_name,ucsc_args,pipeline_args)
-        def_args = Popen('chipseq_pipeline.py --exp-name=%s %s %s --print-args'%(exp_name,ucsc_args,pipeline_args),shell=True,stdout=PIPE,stderr=PIPE).communicate()[0]
+        def_args = Popen('chipseq_pipeline.py --exp-name=%s %s %s %s --print-args'%(exp_name,ucsc_args,parallel,pipeline_args),shell=True,stdout=PIPE,stderr=PIPE).communicate()[0]
 
         wb('Creating script...\n')
         script_fn = '%s_pipeline.sh'%exp_name
