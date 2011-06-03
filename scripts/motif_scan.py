@@ -25,10 +25,14 @@ usage = "%prog [options] <org> <peaks fn> <TAMO motif fn>"
 desc = "Do some motif scanning stuffs"
 parser = OptionParser(usage=usage,description=desc)
 
-parser.add_option('-n','--top-n',dest='top_n',type='int',default=None,help='use top n peaks by pvalue for sequence scanning [default: all]')
-parser.add_option('-i','--motif-indices',dest='motif_ind',default='all',help='which indices from <TAMO motif fn> to use [default: %default]')
-parser.add_option('-d','--dir',dest='dir',default='motif_results',help='write all results into this directory')
-parser.add_option('--fixed-peak-width',dest='fixed_w',type='int',default=None,help='use only a fixed peak window around the summit instead of whole peak')
+parser.add_option('-n','--top-n',dest='top_n',type='int',default=None,
+                  help='use top n peaks by pvalue for sequence scanning [default: all]')
+parser.add_option('-i','--motif-indices',dest='motif_ind',default='all',
+                  help='which indices from <TAMO motif fn> to use [default: %default]')
+parser.add_option('-d','--dir',dest='dir',default='motif_results',
+                  help='write all results into this directory')
+parser.add_option('--fixed-peak-width',dest='fixed_w',type='int',default=None,
+                  help='use only a fixed peak window around the summit instead of whole peak')
 
 revcomp_map = string.maketrans('ACGT','TGCA')
 
@@ -83,34 +87,44 @@ if __name__ == '__main__' :
     peaks_dt = np.dtype([('chr',np.str_,13),('start',np.int32),('end',np.int32),('pvalue',np.float64)])
     if opts.fixed_w is not None :
         
-        peaks = np.array([(r['chr'],
+        all_peaks = np.array([(r['chr'],
                           r['start']+r['summit']-opts.fixed_w/2.,
                           r['start']+r['summit']+opts.fixed_w/2.,
                           r['-10*log10(pvalue)']) for r in MACSFile(peaks_fn)],
                           dtype=peaks_dt)
     else :
-        peaks = np.array([(r['chr'],
+        all_peaks = np.array([(r['chr'],
                            r['start'],
                            r['end'],
                            r['-10*log10(pvalue)']) for r in MACSFile(peaks_fn)],
                            dtype=peaks_dt)
 
     # -10*log10(pvalue) -> -log10(pvalue)
-    peaks[:]['pvalue'] /= 10.
-    peak_pvals = peaks[:]['pvalue']
+    all_peaks[:]['pvalue'] /= 10.
+    peak_pvals = all_peaks[:]['pvalue']
 
     # find the sorted order of peaks by descending pvalue
     peak_pval_inds = peak_pvals.argsort()
     peak_pval_inds = peak_pval_inds[::-1] # ascending -> descending
-    peaks = peaks[peak_pval_inds,:]
+    all_peaks = all_peaks[peak_pval_inds,:]
+
+    # for pvalue vs motif score
+    pval_num_bins = 20
+    pval_bin_size = all_peaks[:]['pvalue'].size/pval_num_bins
+    # try to take at least 100 sequences, at most 10% of bin size
+    sample_percent = max(min(1.,100./pval_bin_size),0.1)
+    pval_bin_memo = {}
 
     if opts.top_n is not None :
-        peaks = peaks[0:opts.top_n]
+        peaks = all_peaks[0:opts.top_n]
         peak_pvals = peak_pvals[peak_pval_inds][0:opts.top_n]
+    else :
+        peaks = all_peaks
 
     # extract fasta sequences for these peaks
     nibDb = NibDB(nib_dirs=get_org_settings(org)['genome_dir'])
 
+    """
     # get the peak sequences
     sys.stderr.write('Getting peak sequences\n')
     fasta_batch = []
@@ -131,8 +145,10 @@ if __name__ == '__main__' :
 
     # now sample the background sequences
     sys.stderr.write('Sampling bg sequences (len(fg_fasta)==%d)\n'%(len(fg_fasta_dict)))
-    bg_fasta_dict = rejection_sample_bg(fg_fasta_dict,org,bg_match_epsilon=1e-3,verbose=True)
+    #bg_fasta_dict = rejection_sample_bg(fg_fasta_dict,org,bg_match_epsilon=1e-3,verbose=True)
+    bg_fasta_dict = {}
     bg_fasta = bg_fasta_dict.values()
+    """
 
     # load the motifs
     sys.stderr.write('Movin right along\n')
@@ -142,7 +158,7 @@ if __name__ == '__main__' :
         motif_indices = [int(i) for i in opts.motif_ind.split(',') if len(i) != 0]
         motifs = [motifs[i] for i in motif_indices]
     else :
-        motif_indices = range(len(motifs))
+        motif_indices = xrange(len(motifs))
 
     # use all cores w/ a Pool
     #pool = Pool(processes=opts.n_procs)
@@ -156,6 +172,7 @@ if __name__ == '__main__' :
 
     seq_scores = []
     for m_i,m in zip(motif_indices,motifs) :
+
         out_dir = opts.dir
 
         try :
@@ -164,6 +181,72 @@ if __name__ == '__main__' :
             m_name = m.source.split()[0]
 
         print 'starting',m_name
+
+        # pvalue vs motif score
+        pval_bin_bounds = []
+        pval_bin_pvals = []
+        pval_bin_ranges = np.arange(0,all_peaks[:]['pvalue'].size,pval_bin_size)
+        for st_i in pval_bin_ranges :
+
+            end_i = min(st_i+pval_bin_size,all_peaks[:]['pvalue'].size-1)
+            st_val = all_peaks[st_i]['pvalue']
+            end_val = all_peaks[end_i]['pvalue']
+
+            print st_i, end_i, pval_bin_size, st_val, end_val
+
+            # keep track of the pvalue bounds of each bin
+            pval_bin_bounds.append((st_val,end_val))
+
+            # we sample sample_percent% of peaks in the bin to score
+            num_to_sample = int(sample_percent*(end_i-st_i))
+            inds_to_sample = random.sample(xrange(st_i,end_i),num_to_sample)
+
+            # we memoize the sequences we've seen before so we don't fetch seqs
+            # unnecessarily
+            unmemoed_inds_to_sample = set(inds_to_sample).difference(set(pval_bin_memo.keys()))
+
+            bin_fasta_batch = []
+            for peak_i in unmemoed_inds_to_sample :
+                bin_fasta_batch.append((str(all_peaks[peak_i]['chr']),
+                                        int(all_peaks[peak_i]['start']),
+                                        int(all_peaks[peak_i]['end']),
+                                        '+'))
+
+            if len(bin_fasta_batch) != 0 :
+                bin_headers, bin_seq = nibDb.get_fasta_batch(bin_fasta_batch)
+
+                for i, ind in enumerate(unmemoed_inds_to_sample) :
+                    pval_bin_memo[ind] = bin_seq[i].upper()
+
+            # score the sequences
+            pval_bin_pvals.append([])
+            for ind in inds_to_sample :
+                max_score = m.bestscan(pval_bin_memo[ind])
+                max_score = (max_score-m.minscore)/(m.maxscore-m.minscore)
+                pval_bin_pvals[-1].append(max_score)
+            pval_bin_pvals[-1] = np.array(pval_bin_pvals[-1])
+
+
+        mp.figure(figsize=(4,4))
+        font = {'size':'9'}
+        mp.rc('font',**font)
+
+        # box plot of the bins
+        mp.boxplot(pval_bin_pvals,positions=np.arange(len(pval_bin_pvals)))
+
+        # plot the means of the bins
+        #[(x[0]+x[1])/2. for x in pval_bin_bounds]
+        mp.plot(np.arange(len(pval_bin_pvals)),
+             [x.mean() for x in pval_bin_pvals],'bo')
+        mp.title('Sampled motif score vs binned peak pvalue')
+        mp.xlabel('Binned -log10(pvalue)')
+        mp.ylabel('Maximum normalized motif score')
+
+        img_fn = os.path.join(out_dir,m_name.translate(fn_trans)+'_%d_peakmot.png'%m_i)
+        mp.savefig(img_fn)
+        mp.clf()
+
+        continue
 
         fg_ratios = []
         for seq in fg_fasta :
@@ -208,7 +291,7 @@ if __name__ == '__main__' :
         # line plot of average peak p-value for binned motif score
         mp.title('Average peak p-value for binned motif score\n%s'%m_name)
         mp.xlabel('normalized motif score')
-        mp.ylabel('avg(-log10(pvalue))')
+        mp.ylabel('-log10(pvalue)')
         mp.boxplot(binned_motif_scores,positions=np.arange(motif_score_bins.size-1),sym='')
         p = mp.plot(np.arange(motif_score_bins.size-1),
                 [x.mean() for x in binned_motif_scores],
@@ -238,6 +321,9 @@ if __name__ == '__main__' :
                 'bg_scores': bg_ratios,
                 #'wmw_pval': WMWtest(fg_ratios,bg_ratios)
                }
+
+        # binned pvalue vs sampled motif score
+        
 
         print 'done with',m_name
 
