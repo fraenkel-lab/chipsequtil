@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import getpass
 import glob
 import json
 import matplotlib
@@ -11,18 +12,20 @@ import shutil
 import sys
 
 from collections import defaultdict
-from csv import reader, DictReader
+from csv import reader, writer, DictReader
 from math import log
 from optparse import OptionParser
 from subprocess import call
 
-from chipsequtil import MACSFile
+from chipsequtil import MACSFile, get_org_settings
 from reStUtil import *
 
 usage = '%prog [options] [<peak filename> <peak filename> ...]'
 parser = OptionParser(usage=usage)
 parser.add_option('-d','--dir',dest='dir',default='.',help='Source directory [default: %default]')
 parser.add_option('-n','--name',dest='name',help='Experiment name [default: current directory name]')
+parser.add_option('--skip-motif-scan',dest='skip_motif_scan',action='store_true',help="skip motif_scan.py, but still build motifs into document (assumes motif_scan.py was previously run)")
+parser.add_option('--skip-motif-stuff',dest='skip_motif_stuff',action='store_true',help="motif stuff takes a long time, manually skip it if no motif results are available or you don't care about them")
 
 {
   "experiment path": "/nfs/antdata/analysis/100809_P/100809_St7-10ul-p300_degenhar_Fraenkel_L2_mm9_sorted.bed", 
@@ -84,9 +87,9 @@ if __name__ == '__main__' :
         sys.stderr.write('Could not find parameter file, building one as best I can\n')
         curr_user = getpass.getuser()
         json_d = {'analysis path':os.getcwd(),
-                      'stage url':'http://fraenkel.mit.edu/stage/'+curr_user,
-                      'stage path':'/nfs/antdata/web_stage/'+curr_user
-                     }
+                  'stage url':'http://fraenkel.mit.edu/stage/'+curr_user,
+                  'stage dir':'/nfs/antdata/web_stage/'+curr_user
+                 }
     else :
         if len(param_json_fn) > 1 :
             sys.stderr.write('Found more than one parameter file, picking the first one: %s\n'%','.join(param_json_fn))
@@ -123,9 +126,12 @@ if __name__ == '__main__' :
         macs_f = MACSFile(peak_fn)
         peak_json[peak_fn] = macs_f.file_info
 
+        # positive peaks
         peak_stats = defaultdict(list)
         num_peaks = 0
+        pos_chr_dist = defaultdict(int)
         for peak in macs_f :
+            pos_chr_dist[peak['chr']] += 1
             peak_stats['length'].append(peak['length'])
             peak_stats['tags'].append(peak['tags'])
             peak_stats['pvalue'].append(peak['-10*log10(pvalue)'])
@@ -146,13 +152,17 @@ if __name__ == '__main__' :
                     peak_json[peak_fn][m.group(1)] = int(m.group(2))
 
         # do the negative peaks
-        neg_peak_fn = peak_json[peak_fn]['name']+'_negative_peaks.xls'
+        # negative peak file is now filtered
+        neg_peak_fns = glob.glob(peak_json[peak_fn]['name']+'_negative_peaks_*.xls')
         #TODO - do check for file exists
+        neg_peak_fn = neg_peak_fns[0]
         neg_peak_f = MACSFile(neg_peak_fn)
 
         neg_peak_stats = defaultdict(list)
         num_peaks = 0
+        neg_chr_dist = defaultdict(int)
         for peak in neg_peak_f :
+            neg_chr_dist[peak['chr']] += 1
             neg_peak_stats['length'].append(peak['length'])
             neg_peak_stats['tags'].append(peak['tags'])
             neg_peak_stats['pvalue'].append(peak['-10*log10(pvalue)'])
@@ -245,6 +255,68 @@ if __name__ == '__main__' :
         mp.savefig(fdr_hist_fn)
         mp.clf()
 
+        chr_dist_name = macs_f.file_info['name']+'_chr_dist.png'
+        chr_dist_fn = os.path.join(infosite_img_path,chr_dist_name)
+        chr_dist_url = json_d['stage url']+'/'+infosite_dir_name+'/images/'+chr_dist_name
+        peak_json[peak_fn]['chr distribution url'] = chr_dist_url
+        chromos = []
+        if json_d.has_key('org') :
+            chr_sizes_fn = get_org_settings(json_d['org'])['ucsc_chrom_sizes']
+            chromos = [r[0] for r in reader(open(chr_sizes_fn),delimiter='\t')]
+        else :
+            chromos = list(set(pos_chr_dist.keys()).union(neg_chr_dist.keys()))
+        chromos = filter(lambda x: 'random' not in x,chromos)
+
+        # hack chrM, chrX and chrY so they sort right
+        if 'chrM' in chromos :
+            chromos[chromos.index('chrM')] = 'chr100'
+        if 'chrX' in chromos :
+            chromos[chromos.index('chrX')] = 'chr101'
+        if 'chrY' in chromos :
+            chromos[chromos.index('chrY')] = 'chr102'
+
+        chromos.sort(key=lambda x: int(x.replace('chr','')))
+
+        # unhack chrM, chrX and chrY so they display right
+        if 'chr100' in chromos :
+            chromos[chromos.index('chr100')] = 'chrM'
+        if 'chr101' in chromos :
+            chromos[chromos.index('chr101')] = 'chrX'
+        if 'chr102' in chromos :
+            chromos[chromos.index('chr102')] = 'chrY'
+
+        random_chrs = filter(lambda x: 'random' in x,chromos)
+        pos_plot_chr_dist = defaultdict(int)
+        neg_plot_chr_dist = defaultdict(int)
+        for chrom in chromos :
+            pos_plot_chr_dist[chrom] += pos_chr_dist.get(chrom,0)
+            neg_plot_chr_dist[chrom] += neg_chr_dist.get(chrom,0)
+        for chrom in random_chrs :
+            pos_plot_chr_dist['Other'] += pos_chr_dist.get(chrom,0)
+            neg_plot_chr_dist['Other'] += neg_chr_dist.get(chrom,0)
+        chromos.append('Other')
+        mp.figure(figsize=figsize)
+        mp.subplots_adjust(bottom=0.18,**subplots_sizes)
+        mp.bar(range(len(chromos)),
+               [pos_plot_chr_dist[k] for k in chromos],
+               width=0.45,
+               color='b',
+               label='Positive'
+              )
+        mp.bar([x+0.45 for x in range(len(chromos))],
+               [neg_plot_chr_dist[k] for k in chromos],
+               width=0.45,
+               color='g',
+               label='Negative'
+              )
+        mp.xticks([x+0.45 for x in range(len(chromos))],chromos,rotation=90)
+        mp.title('%s\nPeaks by chromosome'%macs_f.file_info['name'])
+        mp.xlabel('Chromosome')
+        mp.ylabel('# peaks')
+        mp.legend()
+        mp.savefig(chr_dist_fn)
+        mp.clf()
+
         # pos vs neg peaks
         pos_v_neg_name = '%s_pos_v_neg.png'%macs_f.file_info['name']
         pos_v_neg_fn = os.path.join(infosite_img_path,pos_v_neg_name)
@@ -255,17 +327,28 @@ if __name__ == '__main__' :
         r = call(cmd,shell=True)
 
         # motif stuff
+        if opts.skip_motif_scan or opts.skip_motif_stuff :
+            sys.stderr.write('Obediently skipping motif stuff\n')
+        else :
+            # not exactly sure the best way to find the filtered macs file yet,
+            # just take the .xls file with the longest filename?
+            filtered_peak_fns = glob.glob('%s_peaks_*'%macs_f.file_info['name'])
+            filtered_peak_fns.sort(key=lambda x: len(x),reverse=True)
+            filtered_peak_fn = filtered_peak_fns[0]
 
-        refined_motif_fns = glob.glob('%s_refined_motifs.tamo'%macs_f.file_info['name']) #catRun_mfold10,30_pval1e-5_motifs_beta0.0_cv5.txt
-        #TODO - do check for file exists
+            motif_results_fns = glob.glob('%s_motifs_beta*_cv*[0-9].tamo'%macs_f.file_info['name'])
+            motif_results_fn = motif_results_fns[0]
+            #TODO - do check for file exists
 
-        refined_motif_fn = refined_motif_fns[0]
+            # motif_scan.py <org> <peak fn> <TAMO motif fn>
+            fixed_peak_width = ''
+            if json_d['fixed peak width'] != 'none' :
+                fixed_peak_width = '--fixed-peak-width=%s'%json_d['fixed peak width']
 
-        # motif_scan.py <org> <peak fn> <TAMO motif fn>
-        cmd = 'motif_scan.py --top-n=2000 --dir=%s/images/ %s %s %s'
-        cmd = cmd%(infosite_dir_name,json_d['org'],peak_fn,refined_motif_fn)
-        sys.stderr.write(cmd+'\n')
-        call(cmd,shell=True)
+            cmd = 'motif_scan.py %s --dir=%s/images/ %s %s %s'
+            cmd = cmd%(fixed_peak_width,infosite_dir_name,json_d['org'],filtered_peak_fn,motif_results_fn)
+            sys.stderr.write(cmd+'\n')
+            call(cmd,shell=True)
 
         # pot_peaks_vs_motifs.py <peaks fn> <seq score fn> <bg score fn>
 
@@ -313,6 +396,7 @@ if __name__ == '__main__' :
                         ('tags after filtering in control','after filtering',ident),
                         ('Redundant rate in control','redunancy rate',fl_str),
                         ('maximum duplicate tags at the same position in control','max dup. tags',ident),
+                        ('peak tag count filter','*Minimum peak tag count*',ident),
                         ('d','*MACS d*',ident),
                         ('band width','*band width*',ident),
                         ('MACS version','*MACS version*',ident),
@@ -326,14 +410,21 @@ if __name__ == '__main__' :
         stat_rows = [('*%s*'%label, fmt(peak_stats.get(key))) for key,label,fmt in stat_key_labels_fmts]
         doc.add(ReStSimpleTable(None,stat_rows))
 
+        # link to the peaks file
+        peak_infosite_name = os.path.join(infosite_dir_name,peak_fn)
+        peak_infosite_path = os.path.abspath(peak_infosite_name)
+        peak_infosite_url = json_d['stage url'] + '/' + peak_infosite_name
+        call('cp %s %s'%(peak_fn,os.path.join(infosite_dir_name,peak_fn)),shell=True)
+        doc.add(ReStSimpleTable(None,[('**MACS Peaks File**','`%s`_'%peak_infosite_url)]))
+        doc.add(ReStHyperlink(peak_infosite_url,url=peak_infosite_url))
+
         # UCSC track info
         if peak_stats.has_key('ucsc tracks') :
             ucsc_tbl = ReStSimpleTable(('**UCSC Genome Browser Track Lines**',),
                                       [[x] for x in peak_stats['ucsc tracks']])
             doc.add(ucsc_tbl)
         else :
-            doc.add(ReStSimpleTable(None,[['UCSC integration was not enabled for this experiment']])
-
+            doc.add(ReStSimpleTable(None,[['UCSC integration was not enabled for this experiment']]))
 
         # peak quality plots
         img_tbl1 = ReStSimpleTable(None, [
@@ -341,7 +432,7 @@ if __name__ == '__main__' :
                      ReStImage(peak_stats['pos v neg url'],options={'width':'600px','align':'center'}),
                     ]
                    ]
-                   )
+                  )
         doc.add(img_tbl1)
 
         img_tbl2 = ReStSimpleTable(None, [
@@ -353,7 +444,7 @@ if __name__ == '__main__' :
                     [
                      ReStImage(peak_stats['fold distribution url'],options={'width':'250px','align':'center'}),
                      ReStImage(peak_stats['fdr distribution url'],options={'width':'250px','align':'center'}),
-                     ''
+                     ReStImage(peak_stats['chr distribution url'],options={'width':'250px','align':'center'})
                     ]
                   ]
                   )
@@ -433,12 +524,37 @@ if __name__ == '__main__' :
         feature_patts = ('promoter.txt','gene_exon.txt','gene_intron.txt','after.txt','intergenic.xls')
         feature_data = []
         feature_urls = []
+
         for patt in feature_patts :
             feature_fn = '%s_*_%s'%(peak_stats['name'],patt)
             feature_path = glob.glob(os.path.join(infosite_dir_name,feature_fn))[0]
             feature_url = json_d['stage url']+'/'+feature_path
-            feature_data.append(('**%s peaks**'%patt,'`%s`_'%feature_url))
+
+            # create UCSC formatted versions of the files
+            if patt.endswith('.txt') : # these have gene columns
+                feature_type = patt.replace('.txt','')
+                ucsc_feature_fn = feature_fn.replace('.txt','_ucsc.txt')
+                st,en = 2,4
+            elif patt.endswith('.xls') :
+                feature_type = patt.replace('.xls','')
+                ucsc_feature_fn = feature_fn.replace('.xls','_ucsc.xls')
+                st,en = 0,2
+
+            ucsc_feature_path = os.path.join(infosite_dir_name,ucsc_feature_fn)
+            ucsc_feature_f = open(ucsc_feature_path,'w')
+            ucsc_feature_writer = writer(ucsc_feature_f,delimiter='\t')
+            for l in reader(open(feature_path),delimiter='\t') :
+                rec = l[0:st] + \
+                      ['%s:%s-%s'%tuple(l[st:en+1])] + \
+                      l[en+1:]
+                ucsc_feature_writer.writerow(rec)
+            ucsc_feature_f.close()
+
+            ucsc_feature_url = json_d['stage url']+'/'+ucsc_feature_path
+
+            feature_data.append(('**%s peaks**'%feature_type,'`%s`_ `UCSC %s`_'%(feature_url,feature_type)))
             feature_urls.append(ReStHyperlink(feature_url,url=feature_url))
+            feature_urls.append(ReStHyperlink('UCSC %s'%feature_type,url=ucsc_feature_url))
 
         gene_mapping_data.extend(feature_data)
         feat_tbl = ReStSimpleTable(('**Gene mapping data**',''),gene_mapping_data)
@@ -446,8 +562,6 @@ if __name__ == '__main__' :
         doc.add(ReStHyperlink(gene_url,url=gene_url))
         for url in feature_urls :
             doc.add(url)
-
-       
 
         img_tbl3 = ReStSimpleTable(None, [
                     [
@@ -463,88 +577,89 @@ if __name__ == '__main__' :
         doc.add(img_tbl3)
 
         # now put some motif stuff up there
-        
-        # for now, just list a table of the top 30 significant, unrefined motifs
-        doc.add(ReStSection('%s Top 30 Unrefined Motif Results'%peak_stats['name'],level=3))
-        motif_results_fns = glob.glob('%s_motifs_beta*_cv*[0-9].txt'%macs_f.file_info['name']) #catRun_mfold10,30_pval1e-5_motifs_beta0.0_cv5.txt
-        #TODO - do check for file exists
 
-        motif_results_fn = motif_results_fns[0]
 
-        motif_reader = reader(open(motif_results_fn),delimiter='\t')
+        if opts.skip_motif_stuff :
+            sys.stderr.write('Obediently skipping even more motif stuff\n')
+        else :
+            # THEME refines all motifs, display the top 30
 
-        motif_header = motif_reader.next()
-        motif_data = []
-        top_n = 30
-        motif_fmts = (ident,ident,int,fl_str,fl_str,fl_str,fl_str,fl_str,fl_str)
-        motif_plot_urls = []
-        # HACK HACK HACK HACK HACK HACK
-        # the indices from motif_scan.py are 0-n because of the way THEME
-        # does things.  The file *_sig_motif_ids.txt contains the indices
-        # that maps 0-n back to the original motif indices that are displayed
-        # on the site.  This code finds and maps the 0-n indexed filenames
-        # back to the original indices by renaming them YUCK
-        motif_sig_inds_fn = glob.glob('%s_sig_motif_ids.txt'%peak_stats['name'])[0]
-        motif_sig_inds_d = dict([(v,i) for i,v in enumerate(open(motif_sig_inds_fn).read().split(','))])
-        for rec in motif_reader :
-            motif_data.append([f(x) for f,x in zip(motif_fmts,rec)])
-            if rec[2] in motif_sig_inds_d.keys() :
-                from_id = motif_sig_inds_d[rec[2]]
-                try :
-                    old_id_fn = glob.glob(infosite_dir_name+'/images/*_%d_peakmot.png'%from_id)[0]
-                    new_id_fn = old_id_fn.replace('_%d_'%from_id,'_%s_'%rec[2])
-                    os.rename(old_id_fn,new_id_fn)
-                except :
-                    sys.stderr.write("Couldn't rename file for pattern %s, just " \
-                                     "assuming its there\n"%(infosite_dir_name+'/images/*_%d_peakmot.png'%from_id))
-                    new_id_fn = glob.glob(infosite_dir_name+'/images/*_%s_peakmot.png'%rec[2])[0]
+            # for now, just list a table of the top 30 significant, unrefined motifs
+            doc.add(ReStSection('%s Top 30 Refined Motif Results'%peak_stats['name'],level=3))
+            motif_results_fns = glob.glob('%s_motifs_beta*_cv*[0-9].txt'%macs_f.file_info['name']) #catRun_mfold10,30_pval1e-5_motifs_beta0.0_cv5.txt
+            #TODO - do check for file exists
+
+            motif_results_fn = motif_results_fns[0]
+
+            motif_reader = reader(open(motif_results_fn),delimiter='\t')
+
+            motif_header = motif_reader.next()
+            motif_data = []
+            top_n = 30
+            motif_fmts = (ident,ident,int,fl_str,fl_str,fl_str,fl_str,fl_str,fl_str)
+            motif_plot_urls = []
+            for rec in motif_reader :
+                motif_data.append([f(x) for f,x in zip(motif_fmts,rec)])
+                """
+                if rec[2] in motif_sig_inds_d.keys() :
+                    from_id = motif_sig_inds_d[rec[2]]
+                    try :
+                        old_id_fn = glob.glob(infosite_dir_name+'/images/*_%d_peakmot.png'%from_id)[0]
+                        new_id_fn = old_id_fn.replace('_%d_'%from_id,'_%s_'%rec[2])
+                        os.rename(old_id_fn,new_id_fn)
+                    except :
+                        sys.stderr.write("Couldn't rename file for pattern %s, just " \
+                                         "assuming its there\n"%(infosite_dir_name+'/images/*_%d_peakmot.png'%from_id))
+                """
+                new_id_fn = glob.glob(infosite_dir_name+'/images/*_%s_peakmot.png'%rec[2])[0]
                 motif_plot_urls.append(json_d['stage url']+'/'+new_id_fn)
 
-        doc.add(ReStSimpleTable(['**%s**'%x for x in motif_header],motif_data[:top_n]))
+            doc.add(ReStSimpleTable(['**%s**'%x for x in motif_header],motif_data[:top_n]))
 
-        # create another file with the full table
-        motif_results_base, motif_results_ext = os.path.splitext(motif_results_fn)
-        motif_doc_fn = motif_results_base+'.rst'
-        motif_doc_path = os.path.join(infosite_path,motif_doc_fn)
-        motif_doc_html_fn = motif_results_base+'.html'
-        motif_doc_html_path = os.path.join(infosite_path,motif_doc_html_fn)
-        motif_doc_url = json_d['stage url']+'/'+infosite_dir_name+'/'+motif_doc_html_fn
-        motif_doc = ReStDocument(motif_doc_path)
-        motif_doc.add(ReStSection('%s Full Motif Results'%peak_stats['name']))
-        motif_doc.add('`Back to main infopage`_')
-        motif_doc.add(ReStSimpleTable(['**%s**'%x for x in motif_header],motif_data))
-        motif_doc.add('`Back to main infopage`_')
-        motif_doc.add(ReStHyperlink('Back to main infopage',url=reSt_url))
-        motif_doc.write()
-        motif_doc.close()
-        rst2html_call = 'rst2html --stylesheet-path=/nfs/antdata/web_stage/css/lsr.css ' \
-                        '%s %s'%(motif_doc_path,motif_doc_html_path)
-        sys.stderr.write(rst2html_call+'\n')
-        r = call(rst2html_call,shell=True)
-        doc.add('`All unrefined motifs`_')
-        doc.add(ReStHyperlink('All unrefined motifs',url=motif_doc_url))
+            # create another file with the full table
+            motif_results_base, motif_results_ext = os.path.splitext(motif_results_fn)
+            motif_doc_fn = motif_results_base+'.rst'
+            motif_doc_path = os.path.join(infosite_path,motif_doc_fn)
+            motif_doc_html_fn = motif_results_base+'.html'
+            motif_doc_html_path = os.path.join(infosite_path,motif_doc_html_fn)
+            motif_doc_url = json_d['stage url']+'/'+infosite_dir_name+'/'+motif_doc_html_fn
+            motif_doc = ReStDocument(motif_doc_path)
+            motif_doc.add(ReStSection('%s Full Motif Results'%peak_stats['name']))
+            motif_doc.add('`Back to main infopage`_')
+            motif_doc.add(ReStSimpleTable(['**%s**'%x for x in motif_header],motif_data))
+            motif_doc.add('`Back to main infopage`_')
+            motif_doc.add(ReStHyperlink('Back to main infopage',url=reSt_url))
+            motif_doc.write()
+            motif_doc.close()
+            rst2html_call = 'rst2html.py --stylesheet-path=/nfs/antdata/web_stage/css/lsr.css ' \
+                            '%s %s'%(motif_doc_path,motif_doc_html_path)
+            sys.stderr.write(rst2html_call+'\n')
+            r = call(rst2html_call,shell=True)
+            doc.add('`All refined motifs`_')
+            doc.add(ReStHyperlink('All refined motifs',url=motif_doc_url))
 
-        # individual motif plots
-        plt_tbl = []
-        for i,url in enumerate(motif_plot_urls) :
-            if i%3 == 0 :
-                plt_tbl.append([])
-            plt_tbl[-1].append(ReStImage(url))
+            # individual motif plots
+            plt_tbl = []
+            for i,url in enumerate(motif_plot_urls[:30]) :
+                if i%3 == 0 :
+                    plt_tbl.append([])
+                plt_tbl[-1].append(ReStImage(url))
 
-        doc.add(ReStSimpleTable(('**Peak strength vs refined motif strength**','(based on top 2000 peak sequences by pvalue)',''),plt_tbl))
+            doc.add(ReStSimpleTable(('**Peak strength vs refined motif strength**','(based on top 2000 peak sequences by pvalue)',''),plt_tbl))
 
     doc.write()
     doc.close()
 
     # 6. convert reSt to PDF and HTML
-    rst2html_call = 'rst2html --stylesheet-path=/nfs/antdata/web_stage/css/lsr.css ' \
+    rst2html_call = 'rst2html.py --stylesheet-path=/nfs/antdata/web_stage/css/lsr.css ' \
                     '%s %s'%(reSt_path,reSt_html_path)
     sys.stderr.write(rst2html_call+'\n')
     r = call(rst2html_call,shell=True)
 
     pdf_name = exp_name+'_info.pdf'
     pdf_path = os.path.join(infosite_path,pdf_name)
-    #r = call('rst2pdf %s %s'%(reSt_path,pdf_path),shell=True)
+    r = call('rst2pdf %s -o %s'%(reSt_path,pdf_path),shell=True)
 
     # 7. write out url to infosite
-    print json_d['stage url'] 
+    print json_d['stage url']+'/'+infosite_dir_name+'/'+reSt_html_name
+    open(infosite_dir_name+'_url.txt','w').write(json_d['stage url']+'/'+infosite_dir_name+'/'+reSt_html_name+'\n')
