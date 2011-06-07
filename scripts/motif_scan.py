@@ -192,7 +192,7 @@ if __name__ == '__main__' :
             st_val = all_peaks[st_i]['pvalue']
             end_val = all_peaks[end_i]['pvalue']
 
-            print st_i, end_i, pval_bin_size, st_val, end_val
+            #print st_i, end_i, pval_bin_size, st_val, end_val
 
             # keep track of the pvalue bounds of each bin
             pval_bin_bounds.append((st_val,end_val))
