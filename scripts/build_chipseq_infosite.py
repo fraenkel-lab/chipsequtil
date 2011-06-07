@@ -265,33 +265,34 @@ if __name__ == '__main__' :
             chromos = [r[0] for r in reader(open(chr_sizes_fn),delimiter='\t')]
         else :
             chromos = list(set(pos_chr_dist.keys()).union(neg_chr_dist.keys()))
-        chromos = filter(lambda x: 'random' not in x,chromos)
+        standard_chromos = filter(lambda x: re.search('^chr[0-9MXY]+$',x) is not None,chromos)
 
         # hack chrM, chrX and chrY so they sort right
-        if 'chrM' in chromos :
-            chromos[chromos.index('chrM')] = 'chr100'
-        if 'chrX' in chromos :
-            chromos[chromos.index('chrX')] = 'chr101'
-        if 'chrY' in chromos :
-            chromos[chromos.index('chrY')] = 'chr102'
+        if 'chrM' in standard_chromos :
+            standard_chromos[standard_chromos.index('chrM')] = 'chr100'
+        if 'chrX' in standard_chromos :
+            standard_chromos[standard_chromos.index('chrX')] = 'chr101'
+        if 'chrY' in standard_chromos :
+            standard_chromos[standard_chromos.index('chrY')] = 'chr102'
 
-        chromos.sort(key=lambda x: int(x.replace('chr','')))
+        standard_chromos.sort(key=lambda x: int(x.replace('chr','')))
 
         # unhack chrM, chrX and chrY so they display right
-        if 'chr100' in chromos :
-            chromos[chromos.index('chr100')] = 'chrM'
-        if 'chr101' in chromos :
-            chromos[chromos.index('chr101')] = 'chrX'
-        if 'chr102' in chromos :
-            chromos[chromos.index('chr102')] = 'chrY'
+        if 'chr100' in standard_chromos :
+            standard_chromos[standard_chromos.index('chr100')] = 'chrM'
+        if 'chr101' in standard_chromos :
+            standard_chromos[standard_chromos.index('chr101')] = 'chrX'
+        if 'chr102' in standard_chromos :
+            standard_chromos[standard_chromos.index('chr102')] = 'chrY'
 
-        random_chrs = filter(lambda x: 'random' in x,chromos)
+        other_chromos = filter(lambda x: re.search('^chr[0-9MXY]+$',x) is None,chromos)
+
         pos_plot_chr_dist = defaultdict(int)
         neg_plot_chr_dist = defaultdict(int)
-        for chrom in chromos :
+        for chrom in standard_chromos :
             pos_plot_chr_dist[chrom] += pos_chr_dist.get(chrom,0)
             neg_plot_chr_dist[chrom] += neg_chr_dist.get(chrom,0)
-        for chrom in random_chrs :
+        for chrom in other_chromos :
             pos_plot_chr_dist['Other'] += pos_chr_dist.get(chrom,0)
             neg_plot_chr_dist['Other'] += neg_chr_dist.get(chrom,0)
         chromos.append('Other')
