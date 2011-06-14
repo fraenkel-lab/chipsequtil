@@ -20,9 +20,8 @@ description = """1st generation ChIPSeq analysis pipeline:
   - maps peaks to genes
   - extracts fasta files for gene peaks in experiments
   - constructs background sequences matching foreground distribution
-  - runs THEME.py on input sequences w/o refinement
-  - finds significantly enriched motifs
-  - runs THEME.py w/ refinement on most significant motifs
+  - runs THEME.py on input sequences w/ refinement
+  - builds an infosite with stats from this analysis
 
 Control input file is optional.  *organism* argument is passed to the
 *org_settings.py* command to specify organism specific parameters, ensure
@@ -264,116 +263,53 @@ if __name__ == '__main__' :
     # this is because TAMO.MD has a memory leak
     raw_motif_fn = '%s_motifs_beta%s_cv%s.tamo'%(macs_name,theme_opts.beta,theme_opts.cv)
     random_cv_fn = '%s_motifs_beta%s_cv%s_rand.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-    def run_THEME() :
 
-        motifs = MotifTools.load(hyp_fn)
-        THEME_dir = 'THEME_data'
-        if not os.path.exists(THEME_dir) :
-            os.mkdir(THEME_dir)
-        tamo_fns, rand_fns = [], []
+    # new old THEME call
+    #Usage: THEME.sh [options] <FG_FASTA> <BG_FASTA> <HYP_FN> <MARKOV>
+    #
+    #Run old THEME version
+    #
+    #Options:
+    #  -h, --help            show this help message and exit
+    #  --hyp-indices=HYP_INDS
+    #                        0-based indices of hypotheses to run [default: ALL]
+    #  --no-refine           do not run with refinement
+    #  --no-parallelize      do not use wqsub.py for parallelization
+    #  -v, --verbose         print out the commands that are being run
+    #  --dump                dump categtories to file
+    #  --output-filename=OUTPUT_FN
+    #                        filename to write motif results to [default:dummy.txt]
+    #  --random-output=RANDOM_FN
+    #                        filename to write motif results to
+    #                        [default:random.txt]
+    #  --motif-file=MOTIF_FN
+    #                        filename to write motif results to [default:dummy.out]
+    #  --beta=BETA           beta parameter to use [default:0.7]
+    #  --delta=DELTA         delta parameter to use [default:0.001]
+    #  --remove-common       remove common sequences from analysis
+    #  --randomization       run randomization
+    #  --cv=CV               number of cross validation folds [default:5]
+    #  --interactive         run the script interactively
 
-        theme_d = {'opts':opts.theme_args,
-                   'fg_fn':fg_fn,
-                   'bg_fn':bg_fn,
-                   'hyp':hyp_fn,
-                   'markov':markov_fn,
-                   'wqsub':''}
-
-        if opts.parallelize :
-            job_ids = []
-
-        pipe_or_none = PIPE if opts.parallelize else None
-        try :
-
-            if opts.parallelize :
-                sys.stderr.write('Dispatching THEME runs\n') 
-
-            inds = xrange(len(motifs))
-            if theme_opts.hyp_ind != 'all' :
-                inds = [int(i) for i in theme_opts.hyp_ind.split(',')]
-
-            for i in inds :
-
-                m = motifs[i]
-
-                if opts.parallelize :
-                    theme_d['wqsub'] = 'wqsub.py --wqsub-name=THEME_%d'%i
-
-                tamo_fn = os.path.join(THEME_dir,'%d.tamo'%i)
-                rand_fn = os.path.join(THEME_dir,'%d_rand.txt'%i)
-
-                tamo_fns.append(tamo_fn)
-                rand_fns.append(rand_fn)
-
-                theme_d['motif_fn'] = tamo_fn
-                theme_d['cv_fn'] = rand_fn
-                theme_d['hyp_ind'] = i
-
-                theme_call = "%(wqsub)s THEME.py %(opts)s --hyp-indices=%(hyp_ind)d " \
-                    "--motif-file=%(motif_fn)s --randomization " \
-                    "--random-output=%(cv_fn)s " \
-                    "%(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s"
-                if opts.parallelize :
-                    sys.stderr.write('%d/%d\r'%(i+1,len(inds))) 
-                else :
-                    sys.stderr.write(theme_call%theme_d+'\n')
-
-                p = Popen(theme_call%theme_d,shell=True,stdout=pipe_or_none,
-                          stderr=pipe_or_none)
-                stdout, stderr = p.communicate()
-
-                if opts.parallelize :
-                    job_ids.append(stdout.strip())
-
-            if opts.parallelize :
-                wait_cmd = "wait_for_jobid.py %s"%" ".join(job_ids)
-                sys.stderr.write(wait_cmd+'\n')
-                p = Popen(wait_cmd,shell=True)
-                p.wait()
-
-            sys.stderr.write('Consolidating THEME files\n')
-
-            if os.path.exists(raw_motif_fn) :
-                os.remove(raw_motif_fn)
-                open(raw_motif_fn,'w') # create blank file
-
-            if os.path.exists(random_cv_fn) :
-                os.remove(random_cv_fn)
-                open(random_cv_fn,'w') # create blank file
-
-            for tamo_fn, rand_fn in zip(tamo_fns,rand_fns) :
-                # cat the files into the parent files
-                cat_tamo = "cat %s >> %s"%(tamo_fn,raw_motif_fn)
-                p = Popen(cat_tamo,shell=True)
-                p.wait()
-                cat_rand = "cat %s >> %s"%(rand_fn,random_cv_fn)
-                p = Popen(cat_rand,shell=True)
-                p.wait()
-
-        except KeyboardInterrupt :
-            # something happened, delete the running THEME jobs
-            if opts.parallelize :
-                sys.stderr.write('Exception occurred, cleaning up jobs\n')
-                qdel_call = "qdel %s"%" ".join(job_ids)
-                p = Popen(qdel_call,shell=True,stdout=PIPE,stderr=PIPE)
-                p.wait()
-
-        # clean up after wqsub.py if necessary
-        if opts.parallelize :
-            mv_call = "mv -f THEME_*.err THEME_*.out THEME_data"
-            p = Popen(mv_call,shell=True,stdout=PIPE,stderr=PIPE)
-            p.wait()
-    steps.append(PyPS('Run THEME',run_THEME))
-
-    # compile THEME results
     motif_fn = '%s_motifs_beta%s_cv%s.txt'%(macs_name,theme_opts.beta,theme_opts.cv)
-    comp_d = {'tamo_motif_fn':raw_motif_fn,
-         'random_fn':random_cv_fn,
-         'motif_fn':motif_fn}
-    compile_call = "compile_THEME_results.py %(tamo_motif_fn)s %(random_fn)s > " + \
-        "%(motif_fn)s"
-    calls = [compile_call%comp_d]
-    steps.append(PPS('Compile THEME motif results',calls,env=os.environ))
+    theme_d = {'opts':opts.theme_args,
+               'fg_fn':fg_fn,
+               'bg_fn':bg_fn,
+               'hyp':hyp_fn,
+               'markov':markov_fn,
+               'tamo_motif_fn':raw_motif_fn,
+               'random_fn':random_cv_fn,
+               'motif_fn':motif_fn
+              }
+
+    theme_call = "THEME.sh %(opts)s %(fg_fn)s %(bg_fn)s %(hyp)s %(markov)s " \
+                 "--motif-file=%(tamo_motif_fn)s " \
+                 "--random-output=%(random_fn)s " \
+                 "--output-filename=%(motif_fn)s " \
+                 "--randomization"
+
+    calls = [theme_call%theme_d]
+    steps.append(PPS('Run THEME',calls,env=os.environ))
 
     # build infosite
     calls = ['build_chipseq_infosite.py %s'%opts.infosite_args]
