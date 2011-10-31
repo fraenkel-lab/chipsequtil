@@ -25,7 +25,7 @@ OPT_SPEC='
     "TRIALS":{"LONG":"--trials","HELP":"this option is here only for backwards compatibility with THEME.py"}
     }
 }'
-OUTPUT=$(echo $OPT_SPEC | getopts.py -- $@)
+OUTPUT=$(echo $OPT_SPEC | getopts.py --shell=bash -- $@)
 GETOPTS_RET=$?
 if [ $GETOPTS_RET -ne 0 ]; then
     exit 1
@@ -155,18 +155,23 @@ if len(src) == 0 :
     print 'Got weird motif source: %s\n'%src
 src = src[0]+'_%s'%ind
 
+mot_str = str(motif)
+
 cverrs = []
 for l in open("$out_fn") :
     m = re.match("trial: \d+ mean test error: (\d+\.\d+)$",l)
     if m is not None :
          cverrs.append(float(m.group(1)))
 
-print "\t".join([src,str(sum(cverrs)/len(cverrs)),repr(cverrs)])
+print "\t".join([src,mot_str,str(sum(cverrs)/len(cverrs)),repr(cverrs)])
 sys.stdout.flush()
 
 EOF
             done
 
         )
+
+    compile_THEME_results.py $MOTIF_FN $RANDOM_FN --output=$OUTPUT_FN
+
     fi
 fi
