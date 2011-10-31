@@ -5,6 +5,7 @@ import os
 import sys
 from collections import defaultdict
 from optparse import OptionParser, SUPPRESS_HELP
+from random import shuffle
 
 from chipsequtil import MACSFile, MACSOutput, get_file_parts
 from chipsequtil.util import MultiLineHelpFormatter as MF
@@ -48,6 +49,7 @@ parser.add_option('--output',dest='output',default=None,help='filename to output
 parser.add_option('--encode-filters',dest='encode_filters',action='store_true',help='write out records to a file <MACS peaks file>_<filters>.xls (incompatible with --output option)')
 parser.add_option('--summary',dest='summary',action='store_true',help='only print out summary information for the filter')
 parser.add_option('--no-header',dest='no_header',action='store_true',help='do not print out header or metadata info')
+parser.add_option('--shuffle',dest='shuffle',action='store_true',help='shuffle order of filtered records, useful for selecting random peaks')
 
 parser.add_option('--print-encoded-fn',dest='print_encoded_fn',action='store_true',help="print out the filename that would be created by --encode-filters")
 
@@ -98,6 +100,7 @@ summary_str = """\
 # Number of peaks: %(num_recs)d
 # Filters: %(filters)s
 # Sorted by: %(sort_by)s
+# Shuffled: %(shuffled)s
 """
 if __name__ == '__main__' :
 
@@ -113,8 +116,9 @@ if __name__ == '__main__' :
     if opts.encode_filters :
         # construct filename additions
         fn_str = ''
-        for filter in opts.filters :
-            filter_str = filter.replace(' ','')
+        opts.filters.sort()
+        for filt in opts.filters :
+            filter_str = filt.replace(' ','')
             filter_str = filter_str.replace('>=','_GTE_')
             filter_str = filter_str.replace('<=','_LTE_')
             filter_str = filter_str.replace('>','_GT_')
@@ -126,6 +130,9 @@ if __name__ == '__main__' :
 
         if len(opts.sort_by) != 0 :
             fn_str += '_sortby_%s'%opts.sort_by
+
+        if opts.shuffle :
+            fn_str += '_shuffled'
 
         macs_path,macs_fn,macs_basefn,macs_ext = get_file_parts(args[0])
         encoded_fn = os.path.join(macs_path,macs_basefn+fn_str+macs_ext)
@@ -170,12 +177,16 @@ if __name__ == '__main__' :
         pass_recs.sort(key=_sort_keys[opts.sort_by],reverse=opts.sort_dir != 'ASCEND')
 
     # top records
-    num_recs = len(pass_recs) if not opts.top else opts.top
+    num_recs = len(pass_recs) if not opts.top else min(len(pass_recs),opts.top)
 
     # construct the summary string
     filters_str = 'none' if len(opts.filters) == 0  else ', '.join(opts.filters)
     sort_str = 'original order' if not opts.sort_by else opts.sort_by+', '+opts.sort_dir
-    summary = summary_str%{'macs_fn':args[0],'num_recs':num_recs,'filters':filters_str,'sort_by':sort_str}
+    shuffled_str = str(opts.shuffle)
+    summary = summary_str%{'macs_fn':args[0],'num_recs':num_recs,
+                           'filters':filters_str,
+                           'sort_by':sort_str,
+                           'shuffled':shuffled_str}
 
     # print summary only
     if opts.summary :
@@ -188,6 +199,12 @@ if __name__ == '__main__' :
         out_f.write('\t'.join(MACSOutput.FIELD_NAMES)+'\n')
 
     # write out records
-    for rec in pass_recs[:num_recs] :
+    if opts.shuffle :
+        shuffle(pass_recs)
+    out_recs = pass_recs[:num_recs]
+
+    for rec in out_recs :
         out_f.write('\t'.join(map(str,rec))+'\n')
 
+    # good programming practice
+    out_f.close()
