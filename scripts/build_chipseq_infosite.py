@@ -528,7 +528,11 @@ if __name__ == '__main__' :
 
         for patt in feature_patts :
             feature_fn = '%s_*_%s'%(peak_stats['name'],patt)
-            feature_path = glob.glob(os.path.join(infosite_dir_name,feature_fn))[0]
+            feature_path = glob.glob(os.path.join(infosite_dir_name,feature_fn))
+            if len(feature_path) == 0 :
+                sys.stderr.write('Warning: %s could not be found, skipping feature type\n'%os.path.join(infosite_dir_name,feature_fn))
+                continue
+            feature_path = feature_path[0]
             feature_url = json_d['stage url']+'/'+feature_path
 
             # create UCSC formatted versions of the files
