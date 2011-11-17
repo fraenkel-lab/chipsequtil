@@ -13,6 +13,7 @@ SmartFileIter-based classes
 .. autoclass:: BEDFile
 .. autoclass:: GPSFile
 .. autoclass:: MACSFile
+.. autoclass:: KnownGeneFile
 
 Other wrappers
 --------------
