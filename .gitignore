@@ -2,3 +2,4 @@
 build
 src/chipsequtil/org_settings.cfg
 dist
+*.pyc
