@@ -8,3 +8,4 @@ The module documentation of the chipsequtil python package is here.
 
     module_src/chipsequtil
     module_src/nib
+    module_src/seq

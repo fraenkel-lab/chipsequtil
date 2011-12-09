@@ -10,19 +10,19 @@ from chipsequtil.sampling import rejection_sample_bg
 from TAMO.seq import Fasta
 
 usage = '%prog [options] <organism> <fasta file> [<fasta file> ... ]'
-description = """Use rejection sampling to generate a set of background/random
-sequences matching the distance to nearest transcription start site, sequence
-length, and GC content distributions of the input fasta file(s).  Generated
-sequences are genomic sequences sampled based on these distributions. All sequences
-from all files are used to generate the background sequences. The following
-command must output a path to a nib genomic sequence directory and refGene
+description = """Use rejection sampling to generate a set of background/random \
+sequences matching the distance to nearest transcription start site, sequence \
+length, and GC content distributions of the input fasta file(s).  Generated \
+sequences are genomic sequences sampled based on these distributions. All sequences \
+from all files are used to generate the background sequences. The following \
+command must output a path to a nib genomic sequence directory and refGene \
 annotation, respectively :
 
 $> org_settings.py <organism> genome_dir
 $> org_settings.py <organism> refgene_anno_path
 
-Utility prints out generated fasta records to stdout by default.  Input sequences
-from chr20 are mapped to chrX, chr21 are mapped to chrY, and sequences from chrM
+Utility prints out generated fasta records to stdout by default.  Input sequences \
+from chr20 are mapped to chrX, chr21 are mapped to chrY, and sequences from chrM \
 are not used.
 """
 epilog = "Note: script only considers sequences with unique header names, only the last record of those with identical header names is used"
