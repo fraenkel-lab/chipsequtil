@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import string
 import sys
 
 from ConfigParser import ConfigParser
@@ -675,15 +676,10 @@ def check_org_settings(org_key,setting_list) :
     return all([s in settings.keys() for s in setting_list])
 
 
-RC_MAP_TABLE = ''.join([chr(i) for i in xrange(256)])
-# use pairs to replace, otherwise we overwrite previous substitutions
-RC_MAP_TABLE = RC_MAP_TABLE.replace('ab','tb').replace('tu','au').replace('cd','gd').replace('gh','ch')
-RC_MAP_TABLE = RC_MAP_TABLE.replace('AB','TB').replace('TU','AU').replace('CD','GD').replace('GH','CH')
+RC_MAP = string.maketrans('acgtACGT','tgcaTGCA')
 def reverse_complement(seq) :
     """Reverse complements nucleotide string *seq*.  Leaves non-nucleotide characters uneffected."""
-    seq_complement = list(seq.translate(RC_MAP_TABLE))
-    seq_complement.reverse()
-    return ''.join(seq_complement)
+    return seq.translate(RC_MAP)[::-1]
 
 
 def get_gc_content(seq) :
@@ -693,7 +689,7 @@ def get_gc_content(seq) :
 
 
 def get_gc_content_distribution(sequences,bins=100) :
-    '''returns a function that approximates the GC content distibution of the
+    '''returns a list of 
     provided sequences.  Approximation is performed by binning.'''
     gc_contents = [get_gc_content(s) for s in sequences]
     gc_contents.sort()
