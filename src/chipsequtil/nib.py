@@ -335,8 +335,7 @@ class NibDB(SeqDB) :
     def get_fasta_batch(self,recs,mask=NOMASK) :
         '''Batch version of *get_fasta* method.  *recs* is a list of lists/tuples
         with (<chromo>,<start>,<end>,<strand>). Returns list of (header,sequence)
-        tuples in the same sequence as the input records.  Records do not have
-        to all correspond to the same chromosome.'''
+        tuples in the same sequence as the input records.'''
 
         # gather the records for each chromosome together
         chrom_recs = dd(list)

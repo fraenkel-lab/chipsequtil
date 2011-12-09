@@ -4,7 +4,7 @@
 nibFrag API
 ===========
 
-These functions and classes are a native implementation of Jim Kent's nibFrag
+These functions and classes are a native python implementation of Jim Kent's nibFrag
 utility and file format.  The scripts and classes read *.nib* files and can
 extract sequences from them as fast or faster than the standalone tools, and
 also make sequence data accessible and efficient from within python scripts.
