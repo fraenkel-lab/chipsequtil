@@ -7,7 +7,6 @@ from collections import defaultdict
 
 from chipsequtil import get_org_settings, get_gc_content, get_gc_content_distribution, RefGeneFile
 from nib import NibDB, NibException
-from TAMO.seq import Fasta
 
 def kl_divergence(p,q) :
     """Return Kullback-Leibler divergence for two probability distributions
