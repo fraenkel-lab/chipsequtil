@@ -4,7 +4,11 @@
 Sequence data functions and classes
 ===================================
 
-.. autoclass:: FastaFile
+.. autoclass:: FASTAFile
+    :members:
+
+.. autoclass:: FASTQFile
+    :members:
 
 .. autofunction:: fasta_itr
 .. autofunction:: fasta_to_dict
