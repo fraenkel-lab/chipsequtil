@@ -10,7 +10,7 @@ from chipsequtil import BEDFile, MACSFile, get_file_parts, get_org_settings
 from chipsequtil.nib import NibDB
 from chipsequtil.sampling import rejection_sample_bg
 from chipsequtil.util import MultiLineHelpFormatter
-from TAMO.seq import Fasta
+from chipsequtil.seq import write_fasta_to_file
 
 
 usage='%prog [options] <organism> <peak file> [<peak file> ...]'
@@ -136,22 +136,9 @@ if __name__ == '__main__' :
     if opts.output :
         if opts.wrap_width == -1 :
             opts.wrap_width = sys.maxint
-        Fasta.write(dict(fasta_recs),opts.output,linelen=opts.wrap_width)
+        write_fasta_to_file(dict(fasta_recs),opts.output,linelen=opts.wrap_width)
     else :
         for header, seq in fasta_recs :
             if opts.wrap_width != -1 :
                 seq = textwrap.fill(seq,opts.wrap_width)
             sys.stdout.write('>%s\n%s\n'%(header,seq))
-
-    # create bg sequences if requested
-    #if opts.bg_type :
-    #    sys.stderr.write('running rejection sampling\n')
-    #    bg_dict = rejection_sample_bg(dict(fasta_recs),organism)
-
-    #    bg_fn = '%s_bg.fa'%opts.bg_type
-    #    if opts.bg_fn :
-    #        bg_fn = opts.bg_fn
-
-    #    if opts.wrap_width == -1 :
-    #        opts.wrap_width = sys.maxint
-    #    Fasta.write(bg_dict,bg_fn,opts.wrap_width)

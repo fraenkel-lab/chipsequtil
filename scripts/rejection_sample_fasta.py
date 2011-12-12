@@ -7,7 +7,7 @@ from optparse import OptionParser
 from chipsequtil import check_org_settings
 from chipsequtil.util import MultiLineHelpFormatter
 from chipsequtil.sampling import rejection_sample_bg
-from TAMO.seq import Fasta
+from chipsequtil.seq import fasta_to_dict, write_fasta_to_file
 
 usage = '%prog [options] <organism> <fasta file> [<fasta file> ... ]'
 description = """Use rejection sampling to generate a set of background/random \
@@ -49,7 +49,7 @@ if __name__ == '__main__' :
     # load up all the fasta records
     fasta_recs = {}
     for fasta_fn in fasta_fns :
-        fasta = Fasta.load(fasta_fn)
+        fasta = fasta_to_dict(fasta_fn)
         fasta_recs.update(fasta)
 
     # parse --num-seqs argument
@@ -67,7 +67,7 @@ if __name__ == '__main__' :
 
     # write out to file
     if opts.output :
-        Fasta.write(gen_seqs,opts.output)
+        write_fasta_to_file(gen_seqs,opts.output)
     else :
         sys.stdout.write(''.join(['>%s\n%s\n'%(k,v) for k,v in gen_seqs.items()]))
 
