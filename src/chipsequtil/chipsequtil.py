@@ -676,7 +676,8 @@ def check_org_settings(org_key,setting_list) :
     return all([s in settings.keys() for s in setting_list])
 
 
-RC_MAP = string.maketrans('acgtACGT','tgcaTGCA')
+#RC_MAP = string.maketrans('acgtACGT','tgcaTGCA')
+RC_MAP = string.maketrans("AGCTagctWSKMYRnN", "TCGAtcgaWSMKTYnN")
 def reverse_complement(seq) :
     """Reverse complements nucleotide string *seq*.  Leaves non-nucleotide characters uneffected."""
     return seq.translate(RC_MAP)[::-1]
