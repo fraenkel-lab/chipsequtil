@@ -9,7 +9,8 @@ Contents
 
     file_wrappers
     org_settings
-
+    motiftools
+    util
 
 .. automodule:: chipsequtil
     :members:
