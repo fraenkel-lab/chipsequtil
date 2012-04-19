@@ -623,7 +623,7 @@ def _get_org_settings(org_key=None,addnl_configs=[],src=_ALL_SETTINGS) :
 
 
 def get_org_settings(org_key,addnl_configs=[]) :
-    '''Returns a dict of setting/path values for a given organism as specified
+    """Returns a dict of setting/path values for a given organism as specified
     in system-wide and user's settings. *org_key* is the organism name as found
     in the config file, *e.g.* mm9.  *addnl_configs* are filenames of other
     configuration files to add to the set of settings, usually not needed.
@@ -646,7 +646,7 @@ def get_org_settings(org_key,addnl_configs=[]) :
       >>> get_org_settings('mm9')['genome_dir']
           '/nfs/genomes/mouse_gp_jul_07'
 
-    '''
+    """
     return _get_org_settings(org_key,addnl_configs=addnl_configs)
 
 
@@ -679,7 +679,8 @@ def check_org_settings(org_key,setting_list) :
 #RC_MAP = string.maketrans('acgtACGT','tgcaTGCA')
 RC_MAP = string.maketrans("AGCTagctWSKMYRnN", "TCGAtcgaWSMKTYnN")
 def reverse_complement(seq) :
-    """Reverse complements nucleotide string *seq*.  Leaves non-nucleotide characters uneffected."""
+    """Reverse complements nucleotide string *seq*.  Handles IUPAC ambiguity
+    codes, leaves all other characters uneffected."""
     return seq.translate(RC_MAP)[::-1]
 
 
