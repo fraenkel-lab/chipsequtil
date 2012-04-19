@@ -1,5 +1,5 @@
 from itertools import izip
-from textwrap import wrap
+from textwrap import wrap, fill
 
 # FASTA functions and classes
 def fasta_itr(f) :
@@ -43,7 +43,7 @@ def write_fasta_to_file(fasta,f,linelen=None) :
         fasta_itr = fasta
 
     if isinstance(f,str) :
-        f = open(str,'w')
+        f = open(f,'w')
 
     for header, seq in fasta_itr :
         if linelen is not None :
