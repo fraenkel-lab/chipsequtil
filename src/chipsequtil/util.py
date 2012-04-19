@@ -8,7 +8,41 @@ from optparse import IndentedHelpFormatter
 class MultiLineHelpFormatter(IndentedHelpFormatter) :
     """An OptionParser formatter that preserves newline characters in
     description and epilog fields and word-wraps all sequences of text
-    not interrupted by newline characters.
+    not interrupted by newline characters.  The default optparse help
+    formatter strips newline characters out of descriptions. Example usage::
+
+        >>> from optparse import OptionParser
+        >>> desc = '''\n
+        This script does two things:
+
+          1. the thing in item 2
+          2. the thing in item 1
+
+        Please use accordingly.'''
+        >>> parser = OptionParser(description=desc,formatter=MultiLineHelpFormatter())
+        >>> parser.print_help()
+        Usage: ipython [options]
+
+            This script does two things:
+
+              1. the thing in item 2
+              2. the thing in item 1
+
+            Please use accordingly.
+
+            Options:
+              -h, --help  show this help message and exit
+        >>> parser = OptionParser(description=desc)
+        >>> parser.print_help()
+        Usage:  [options]
+
+          This script does two things:    1. the thing in item 2   2. the thing in
+          item 1  Please use accordingly.
+
+          Options:
+            -h, --help  show this help message and exit
+        >>> 
+
     """
 
     def _format_text(self, text) :
