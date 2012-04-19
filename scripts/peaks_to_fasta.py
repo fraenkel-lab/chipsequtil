@@ -46,7 +46,7 @@ def bed_to_fasta(fn,db,min_header=False) :
     for i,rec in enumerate(bed_recs) :
 
         if opts.fixed_peak_width :
-            midpoint = (rec['chromEnd']-rec['chromStart'])/2
+            midpoint = (rec['chromEnd']+rec['chromStart'])/2
             start = max(0,midpoint-opts.fixed_peak_width/2)
             end = min(midpoint+opts.fixed_peak_width/2,db.db_info[rec['chrom']]['nbases'])
             coords = start, end
