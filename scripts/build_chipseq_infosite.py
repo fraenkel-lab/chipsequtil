@@ -154,24 +154,29 @@ if __name__ == '__main__' :
         # do the negative peaks
         # negative peak file is now filtered
         neg_peak_fns = glob.glob(peak_json[peak_fn]['name']+'_negative_peaks_*.xls')
+
         #TODO - do check for file exists
-        neg_peak_fn = neg_peak_fns[0]
-        neg_peak_f = MACSFile(neg_peak_fn)
+        if neg_peak_fns :
+            neg_peak_fn = neg_peak_fns[0]
+            neg_peak_f = MACSFile(neg_peak_fn)
 
-        neg_peak_stats = defaultdict(list)
-        num_peaks = 0
-        neg_chr_dist = defaultdict(int)
-        for peak in neg_peak_f :
-            neg_chr_dist[peak['chr']] += 1
-            neg_peak_stats['length'].append(peak['length'])
-            neg_peak_stats['tags'].append(peak['tags'])
-            neg_peak_stats['pvalue'].append(peak['-10*log10(pvalue)'])
-            neg_peak_stats['fold_enrichment'].append(peak['fold_enrichment'])
-            neg_peak_stats['fdr'].append(peak['FDR(%)'])
-            num_peaks += 1
+            neg_peak_stats = defaultdict(list)
+            num_peaks = 0
+            neg_chr_dist = defaultdict(int)
+            for peak in neg_peak_f :
+                neg_chr_dist[peak['chr']] += 1
+                neg_peak_stats['length'].append(peak['length'])
+                neg_peak_stats['tags'].append(peak['tags'])
+                neg_peak_stats['pvalue'].append(peak['-10*log10(pvalue)'])
+                neg_peak_stats['fold_enrichment'].append(peak['fold_enrichment'])
+                neg_peak_stats['fdr'].append(peak['FDR(%)'])
+                num_peaks += 1
 
-        peak_json[peak_fn]['negative peaks'] = num_peaks
-        peak_json[peak_fn]['reads under negative peaks'] = sum(peak_stats['tags'])
+            peak_json[peak_fn]['negative peaks'] = num_peaks
+            peak_json[peak_fn]['reads under negative peaks'] = sum(peak_stats['tags'])
+        else :
+            peak_json[peak_fn]['negative peaks'] = 'NA'
+            peak_json[peak_fn]['reads under negative peaks'] = 'NA' 
 
         # save the track lines
         ucsc_track_fn = peak_json[peak_fn]['name']+'_MACS_wiggle_tracks.txt'
