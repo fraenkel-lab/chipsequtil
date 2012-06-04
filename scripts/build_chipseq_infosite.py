@@ -178,8 +178,8 @@ if __name__ == '__main__' :
         if os.path.exists(ucsc_track_fn) :
             peak_json[peak_fn]['ucsc tracks'] = open(ucsc_track_fn).readlines()
 
-        font = {'size':'9'}
-        mp.rc('font',**font)
+        #font = {'size':'9'}
+        #mp.rc('font',**font)
 
         figsize = (3.5,3.5)
         subplots_sizes = {'top':0.8,'left':0.15,'right':0.95}
@@ -196,6 +196,7 @@ if __name__ == '__main__' :
         mp.xlabel('peak length')
         mp.ylabel('# peaks')
         mp.legend()
+        print len_hist_fn
         mp.savefig(len_hist_fn)
         mp.clf()
 
@@ -616,8 +617,11 @@ if __name__ == '__main__' :
                         sys.stderr.write("Couldn't rename file for pattern %s, just " \
                                          "assuming its there\n"%(infosite_dir_name+'/images/*_%d_peakmot.png'%from_id))
                 """
-                new_id_fn = glob.glob(infosite_dir_name+'/images/*_%s_peakmot.png'%rec[2])[0]
-                motif_plot_urls.append(json_d['stage url']+'/'+new_id_fn)
+                try :
+                    new_id_fn = glob.glob(infosite_dir_name+'/images/*_%s_peakmot.png'%rec[2])[0]
+                    motif_plot_urls.append(json_d['stage url']+'/'+new_id_fn)
+                except Exception, e :
+                    sys.stderr.write('Exception thrown in plotting motifs, skipping: %s'%e)
 
             doc.add(ReStSimpleTable(['**%s**'%x for x in motif_header],motif_data[:top_n]))
 
