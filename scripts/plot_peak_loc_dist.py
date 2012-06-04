@@ -67,7 +67,11 @@ if __name__ == '__main__' :
         gene_recs.append(dict(zip(GENE_FIELD_NAMES,rec[:gene_field_cnt])))
 
         # this automatically coerces recs into correct format
-        macs_line = [f(x) for f,x in zip(MACSFile.FIELD_TYPES,rec[gene_field_cnt:gene_field_cnt+macs_field_cnt])]
+        macs_line = []
+        for f,x in zip(MACSFile.FIELD_TYPES,rec[gene_field_cnt:gene_field_cnt+macs_field_cnt]) :
+            if f is float :
+                f = float_or_none
+            macs_line.append(f(x))
         macs_recs.append(dict(zip(MACSFile.FIELD_NAMES,macs_line)))
 
         loc_line = [f(x) for f,x in zip(LOC_FIELD_TYPES,rec[gene_field_cnt+macs_field_cnt:])]
